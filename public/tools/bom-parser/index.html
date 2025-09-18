@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minh Cường Steel · BOM JSON Converter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f7f7f7;
+      color: #1f2933;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 32px;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    main {
+      width: min(960px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #f37021;
+    }
+
+    header p {
+      margin: 6px 0 0;
+      color: #51606f;
+    }
+
+    section {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.3);
+      border: 1px solid #e4e7eb;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 160px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #3d4852;
+    }
+
+    input[type="file"],
+    input[type="number"] {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #d9dde3;
+      font: inherit;
+      background: #fdfdfd;
+      color: inherit;
+      transition: border-color 0.2s ease;
+    }
+
+    input[type="number"]:focus,
+    input[type="file"]:focus {
+      outline: none;
+      border-color: #f37021;
+      box-shadow: 0 0 0 2px rgba(243, 112, 33, 0.16);
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    button.primary {
+      background: #f37021;
+      color: #ffffff;
+      box-shadow: 0 12px 20px -12px rgba(243, 112, 33, 0.6);
+    }
+
+    button.secondary {
+      background: #fff4ec;
+      color: #f37021;
+      box-shadow: inset 0 0 0 1px rgba(243, 112, 33, 0.25);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+      box-shadow: none;
+    }
+
+    button:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px -16px rgba(15, 23, 42, 0.35);
+    }
+
+    .status {
+      font-size: 0.85rem;
+      border-radius: 10px;
+      padding: 12px 16px;
+      border: 1px solid transparent;
+      display: none;
+    }
+
+    .status.visible { display: block; }
+    .status.info { border-color: #cbd2d9; background: #f8fafc; color: #475569; }
+    .status.success { border-color: #bef0c7; background: #ecfdf3; color: #027a48; }
+    .status.error { border-color: #fecdd3; background: #fef2f2; color: #b91c1c; }
+
+    pre {
+      background: #0f172a;
+      color: #e0f2fe;
+      padding: 16px;
+      border-radius: 12px;
+      max-height: 480px;
+      overflow: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      border: 1px solid rgba(14, 116, 144, 0.25);
+    }
+
+    .footer-note {
+      font-size: 0.8rem;
+      color: #7b8794;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 20px; }
+      section { padding: 16px; }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+  <script defer>
+    document.addEventListener("DOMContentLoaded", () => {
+      const statusEl = document.getElementById("status");
+      const downloadBtn = document.getElementById("downloadJson");
+
+      const setFatalError = (message) => {
+        if (statusEl) {
+          statusEl.textContent = message;
+          statusEl.className = "status visible error";
+        }
+        if (downloadBtn) downloadBtn.disabled = true;
+      };
+
+      const loadLocalSheetJS = () =>
+        new Promise((resolve, reject) => {
+          const fallback = document.createElement("script");
+          fallback.src = "./xlsx.full.min.js";
+          fallback.onload = () => {
+            if (window.XLSX) {
+              resolve();
+            } else {
+              reject(new Error("Fallback script loaded nhưng không tìm thấy XLSX"));
+            }
+          };
+          fallback.onerror = () => reject(new Error("Không tải được ./xlsx.full.min.js"));
+          document.head.appendChild(fallback);
+        });
+
+      const ensureSheetJS = () => {
+        if (window.XLSX) return Promise.resolve();
+        return loadLocalSheetJS();
+      };
+
+      const initialize = () => {
+        const fileInput = document.getElementById("excelInput");
+        const headerRowInput = document.getElementById("headerRowInput");
+        const outputEl = document.getElementById("jsonOutput");
+        const resetBtn = document.getElementById("resetBtn");
+        const spinnerEl = document.getElementById("spinner");
+
+        let parsedResult = [];
+
+        const showStatus = (message, type = "info") => {
+        statusEl.textContent = message;
+        statusEl.className = `status visible ${type}`;
+      };
+
+        const clearStatus = () => {
+        statusEl.className = "status";
+        statusEl.textContent = "";
+      };
+
+        const toggleSpinner = (visible) => {
+        spinnerEl.style.display = visible ? "inline-flex" : "none";
+      };
+
+        const toNumber = (value) => {
+        if (value === null || value === undefined || value === "") return null;
+        if (typeof value === "number" && !Number.isNaN(value)) return value;
+        const cleaned = value.toString().replace(/[^0-9.,-]/g, "").replace(/,(?=\d{3}(?:\D|$))/g, "");
+        const normalized = cleaned.replace(/,/g, ".");
+        const numeric = Number(normalized);
+        return Number.isFinite(numeric) ? numeric : null;
+      };
+
+        const toStringValue = (value) => {
+        if (value === null || value === undefined) return null;
+        const trimmed = value.toString().trim();
+        return trimmed.length ? trimmed : null;
+      };
+
+        const parseThickness = (value) => {
+        if (value === null || value === undefined || value === "") return null;
+        if (typeof value === "number") return value;
+        const parts = value
+          .toString()
+          .split(/[^0-9.]+/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .map((p) => Number(p.replace(/,/g, ".")))
+          .filter((num) => Number.isFinite(num));
+        if (parts.length === 0) return null;
+        if (parts.length === 1) return parts[0];
+        return parts;
+      };
+
+        const createParent = (row) => ({
+        index: toNumber(row[0]),
+        ass_name: toStringValue(row[1]),
+        part_name: toStringValue(row[2]),
+        profile: toStringValue(row[3]),
+        material: toStringValue(row[4]),
+        thickness: parseThickness(row[5]),
+        width: toNumber(row[6]),
+        length: toNumber(row[7]),
+        qty_per_ass: toNumber(row[8]),
+        qty_total: toNumber(row[9]),
+        weight_per_part: toNumber(row[10]),
+        weight_total: toNumber(row[12]),
+        area_per_ass: toNumber(row[13]),
+        area_total: toNumber(row[14]),
+        welding_machine: toNumber(row[15]),
+        hand_welding: toNumber(row[16]),
+        note: toStringValue(row[17]),
+        children: [],
+      });
+
+        const createChild = (row) => ({
+        index: null,
+        ass_name: toStringValue(row[1]),
+        part_name: toStringValue(row[2]),
+        profile: toStringValue(row[3]),
+        material: toStringValue(row[4]),
+        thickness: parseThickness(row[5]),
+        width: toNumber(row[6]),
+        length: toNumber(row[7]),
+        qty_per_ass: toNumber(row[8]),
+        qty_total: toNumber(row[9]),
+        weight_per_part: toNumber(row[10]),
+        weight_total: toNumber(row[12]),
+        area_per_ass: toNumber(row[13]),
+        area_total: toNumber(row[14]),
+        welding_machine: toNumber(row[15]),
+        hand_welding: toNumber(row[16]),
+        note: toStringValue(row[17]),
+      });
+
+        const processRowsIncrementally = (rows, startRow) => new Promise((resolve) => {
+        const parents = [];
+        let currentParent = null;
+        let pointer = startRow;
+        const totalRows = rows.length;
+        const chunkSize = 400;
+
+        const step = () => {
+          const upper = Math.min(pointer + chunkSize, totalRows);
+
+          for (let i = pointer; i < upper; i += 1) {
+            const row = rows[i] || [];
+            const hasIndex = row[0] !== null && row[0] !== undefined && row[0] !== "";
+
+            if (hasIndex) {
+              const parent = createParent(row);
+              if (parent.index === null) {
+                // Skip malformed parent rows without valid index
+                continue;
+              }
+              parents.push(parent);
+              currentParent = parent;
+            } else if (currentParent) {
+              const child = createChild(row);
+              const hasData = Object.values(child).some((value) => value !== null);
+              if (hasData) {
+                currentParent.children.push(child);
+              }
+            }
+          }
+
+          pointer = upper;
+          if (pointer < totalRows) {
+            showStatus(`Đang xử lý ${Math.min(pointer, totalRows)} / ${totalRows} dòng...`, "info");
+            setTimeout(step, 0);
+          } else {
+            resolve(parents);
+          }
+        };
+
+        step();
+      });
+
+        const handleWorkbook = async (workbook) => {
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        if (!worksheet) {
+          showStatus("Không tìm thấy sheet hợp lệ trong file Excel.", "error");
+          return;
+        }
+
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+        const startRow = Math.max(0, Number(headerRowInput.value || 0) - 1);
+
+        if (rows.length <= startRow) {
+          showStatus("Số dòng bỏ qua quá lớn, không còn dữ liệu để xử lý.", "error");
+          return;
+        }
+
+        toggleSpinner(true);
+        showStatus("Đang đọc file, vui lòng chờ...", "info");
+        parsedResult = await processRowsIncrementally(rows, startRow);
+        toggleSpinner(false);
+
+        if (parsedResult.length === 0) {
+          showStatus("Không tìm thấy dòng BOM hợp lệ sau khi xử lý.", "error");
+          outputEl.textContent = "[]";
+          downloadBtn.disabled = true;
+          return;
+        }
+
+        showStatus(`Hoàn tất · ${parsedResult.length} nhóm cấu kiện.`, "success");
+        outputEl.textContent = JSON.stringify(parsedResult, null, 2);
+        downloadBtn.disabled = false;
+      };
+
+        fileInput.addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        parsedResult = [];
+        outputEl.textContent = "";
+        downloadBtn.disabled = true;
+        if (!file) {
+          clearStatus();
+          return;
+        }
+
+        showStatus(`Đang tải ${file.name}...`, "info");
+        toggleSpinner(true);
+
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+          try {
+            const data = loadEvent.target?.result;
+            const workbook = XLSX.read(data, { type: "array" });
+            toggleSpinner(false);
+            handleWorkbook(workbook);
+          } catch (error) {
+            toggleSpinner(false);
+            showStatus(`Không đọc được file: ${error.message}`, "error");
+          }
+        };
+        reader.onerror = () => {
+          toggleSpinner(false);
+          showStatus("Đã xảy ra lỗi khi đọc file. Vui lòng thử lại.", "error");
+        };
+        reader.readAsArrayBuffer(file);
+      });
+
+        headerRowInput.addEventListener("change", () => {
+        if (parsedResult.length > 0) {
+          showStatus("Thay đổi dòng bắt đầu sẽ áp dụng khi bạn tải lại file.", "info");
+        }
+      });
+
+        downloadBtn.addEventListener("click", () => {
+        if (!parsedResult.length) return;
+        const blob = new Blob([JSON.stringify(parsedResult, null, 2)], {
+          type: "application/json;charset=utf-8",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "bom-structured.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      });
+
+        resetBtn.addEventListener("click", () => {
+        fileInput.value = "";
+        outputEl.textContent = "";
+        parsedResult = [];
+        downloadBtn.disabled = true;
+        clearStatus();
+      });
+      };
+
+      ensureSheetJS()
+        .then(() => initialize())
+        .catch((error) => {
+          setFatalError(
+            `Không tải được thư viện SheetJS (XLSX). Kiểm tra kết nối mạng hoặc đặt file xlsx.full.min.js cùng thư mục. Chi tiết: ${error.message}`
+          );
+        });
+    });
+  </script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Minh Cường Steel · BOM JSON Converter</h1>
+      <p>
+        Upload file Excel (.xls, .xlsx, .xlsm) để chuyển thành JSON có cấu trúc. Công cụ chạy hoàn toàn trên trình duyệt
+        (không cần backend).
+      </p>
+    </header>
+
+    <section>
+      <div class="controls">
+        <div class="control-group">
+          <label for="excelInput">Chọn file Excel</label>
+          <input id="excelInput" type="file" accept=".xls,.xlsx,.xlsm" />
+        </div>
+        <div class="control-group">
+          <label for="headerRowInput">Bỏ qua dòng đầu (mặc định 8)</label>
+          <input id="headerRowInput" type="number" min="1" value="8" />
+        </div>
+        <div class="control-group" style="flex: 1 0 200px;">
+          <label>&nbsp;</label>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button id="downloadJson" class="primary" disabled>
+              <span>⬇</span>
+              <span>Tải JSON</span>
+            </button>
+            <button id="resetBtn" class="secondary">Làm mới</button>
+            <span id="spinner" style="display:none; align-items:center; gap:6px; font-size:0.85rem; color:#51606f;">
+              <span class="loader" style="width:14px; height:14px; border: 2px solid #fbd5bd; border-top-color: #f37021; border-radius: 50%; display:inline-block; animation: spin 0.6s linear infinite;"></span>
+              <span>Đang xử lý...</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section>
+      <h2 style="margin-top:0; font-size:1rem;">Kết quả JSON</h2>
+      <pre id="jsonOutput">Chưa có dữ liệu. Vui lòng upload file BOM.</pre>
+    </section>
+
+    <section>
+      <h3 style="margin-top:0; font-size:1rem;">Hướng dẫn nhanh</h3>
+      <ul style="margin:0 0 16px 18px; color:#51606f; font-size:0.9rem; line-height:1.6;">
+        <li>File Excel cần có header đúng thứ tự (cột 1 = index, cột 2 = ass_name, ...).</li>
+        <li>Dòng bắt đầu dữ liệu có thể điều chỉnh thông qua ô “Bỏ qua dòng đầu”.</li>
+        <li>Hệ thống tự nhận dạng dòng cha (có index) và thêm các dòng con vào mảng <code>children</code>.</li>
+        <li>Các giá trị số sẽ được chuẩn hóa về dạng Number; ô trống sẽ trở thành <code>null</code>.</li>
+        <li>Có thể tải JSON về máy để nhập vào hệ thống điều phối.</li>
+      </ul>
+      <p class="footer-note">
+        Lưu ý: Công cụ chạy trong trình duyệt, không gửi dữ liệu ra ngoài. Với file rất lớn, quá trình xử lý có thể mất
+        vài giây – hãy giữ cửa sổ trình duyệt mở tới khi hoàn tất.
+      </p>
+    </section>
+  </main>
+
+  <style>
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</body>
+</html>

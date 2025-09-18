@@ -196,8 +196,8 @@ export default function DashboardPage() {
   }) => (
     <Card className="p-4">
       <div className="flex items-center gap-3 mb-3">
-        <Icon className="h-5 w-5 text-[#1B5E20]" />
-        <span className="font-medium text-[#212121]">{title}</span>
+        <Icon className="h-5 w-5 text-primary" />
+        <span className="font-medium text-secondary">{title}</span>
       </div>
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
@@ -205,8 +205,8 @@ export default function DashboardPage() {
           <span className="font-medium text-[#212121]">{percentage}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
-          <div 
-            className="bg-[#1B5E20] h-2 rounded-full transition-all duration-300" 
+          <div
+            className="bg-primary h-2 rounded-full transition-all duration-300"
             style={{ width: `${percentage}%` }}
           />
         </div>
@@ -245,7 +245,7 @@ export default function DashboardPage() {
           value={summaryStats.totalComponents}
           subtitle="Trong kế hoạch"
           icon={BarChart3}
-          color="bg-[#1B5E20]"
+          color="bg-primary"
         />
         <StatCard
           title="Hoàn thành"
@@ -266,7 +266,7 @@ export default function DashboardPage() {
           value={`${(summaryStats.completedWeight / 1000).toFixed(1)}T`}
           subtitle={`/${(summaryStats.totalWeight / 1000).toFixed(1)}T tổng`}
           icon={TrendingUp}
-          color="bg-[#1B5E20]"
+          color="bg-primary-dark"
         />
       </div>
 

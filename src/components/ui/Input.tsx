@@ -21,7 +21,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <input
           className={cn(
-            "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[#1B5E20] focus:border-[#1B5E20] transition-colors",
+            "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors",
             error &&
               "border-[#D32F2F] focus:ring-[#D32F2F] focus:border-[#D32F2F]",
             className

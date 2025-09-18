@@ -4,15 +4,25 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  department?: string;
+  workshopCode?: string;
+  workshopName?: string;
   avatar?: string;
 }
 
 export enum UserRole {
-  CHIEF_ENGINEER = 'CHIEF_ENGINEER',
-  TECHNICAL_SECRETARY = 'TECHNICAL_SECRETARY',
-  QA_INSPECTOR = 'QA_INSPECTOR',
-  BOD = 'BOD'
+  TECHNICAL_ENGINEER = 'TECHNICAL_ENGINEER',
+  PRODUCTION_PLANNER = 'PRODUCTION_PLANNER',
+  WORKSHOP_LEAD = 'WORKSHOP_LEAD',
+  MANAGEMENT = 'MANAGEMENT'
 }
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  [UserRole.TECHNICAL_ENGINEER]: 'Phòng kỹ thuật',
+  [UserRole.PRODUCTION_PLANNER]: 'Điều phối sản xuất',
+  [UserRole.WORKSHOP_LEAD]: 'Kỹ sư trưởng xưởng',
+  [UserRole.MANAGEMENT]: 'Quản lý'
+};
 
 export enum ComponentStatus {
   PENDING = 'PENDING',
@@ -164,6 +174,87 @@ export interface ProductionSummary {
     welding: number;
     painting: number;
   };
+}
+
+export enum WorkflowStageStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED'
+}
+
+export enum WorkflowActionType {
+  STARTED = 'STARTED',
+  COMPLETED = 'COMPLETED'
+}
+
+export interface WorkflowStage {
+  id: string;
+  title: string;
+  description: string;
+  role: UserRole;
+  assigneeId: string;
+  status: WorkflowStageStatus;
+  updatedAt?: string;
+  dependsOn?: string[];
+}
+
+export interface WorkflowEvent {
+  id: string;
+  stageId: string;
+  actorId: string;
+  action: WorkflowActionType;
+  timestamp: string;
+  note?: string;
+}
+
+export interface ProjectWorkflow {
+  id: string;
+  name: string;
+  bomCode: string;
+  description?: string;
+  stages: WorkflowStage[];
+  history: WorkflowEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowNotification {
+  id: string;
+  stageId: string;
+  stageTitle: string;
+  recipientId: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export enum BomPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH'
+}
+
+export interface BomTask {
+  id: string;
+  componentCode: string;
+  name: string;
+  stage: ProcessStage;
+  quantity: number;
+  totalWeight: number;
+  plannedStart?: string;
+  plannedEnd?: string;
+  priority?: BomPriority;
+  notes?: string;
+}
+
+export interface BomImportSummary {
+  id: string;
+  fileName: string;
+  importedBy: string;
+  importedAt: string;
+  totalTasks: number;
+  totalWeight: number;
+  warnings: string[];
 }
 
 export interface FilterOptions {

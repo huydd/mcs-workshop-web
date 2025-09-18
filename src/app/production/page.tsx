@@ -1,7 +1,7 @@
 // app/production/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Plus, Search, Filter } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -13,13 +13,27 @@ import { ProductionForm } from "./components/ProductionForm";
 import { ApprovalSection } from "./components/ApprovalSection";
 import { ProductionTableColumns } from "./components/ProductionTableColumns";
 import { ProcessStage, ComponentStatus, mockProcessRecords } from "./types";
+import { useAuth } from "@/context/auth-context";
+import { UserRole } from "@/types";
 
 export default function ProductionPage() {
   const { mobile } = useResponsive();
+  const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStage, setFilterStage] = useState<ProcessStage | "">("");
   const [filterStatus, setFilterStatus] = useState<ComponentStatus | "">("");
+
+  const canCreateRecord = useMemo(() => {
+    if (!user) return false;
+    return [UserRole.PRODUCTION_PLANNER, UserRole.WORKSHOP_LEAD].includes(user.role);
+  }, [user]);
+
+  useEffect(() => {
+    if (!canCreateRecord) {
+      setShowForm(false);
+    }
+  }, [canCreateRecord]);
 
   const handleFormSubmit = (formData: any) => {
     console.log("Form submitted:", formData);
@@ -57,11 +71,26 @@ export default function ProductionPage() {
             Quản lý và ghi nhận các công đoạn sản xuất kết cấu thép
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)} size={mobile ? "sm" : "md"}>
+        <Button
+          onClick={() => setShowForm(true)}
+          size={mobile ? "sm" : "md"}
+          disabled={!canCreateRecord}
+          title={
+            canCreateRecord
+              ? undefined
+              : "Chỉ điều phối sản xuất và kỹ sư trưởng xưởng mới được phép ghi nhận."
+          }
+        >
           <Plus className="h-4 w-4" />
           {!mobile && <span className="ml-2">Ghi nhận mới</span>}
         </Button>
       </div>
+
+      {!canCreateRecord && (
+        <div className="bg-blue-50 border border-blue-100 text-sm text-blue-800 rounded-lg px-4 py-3">
+          Bạn đang đăng nhập bằng tài khoản không có quyền ghi nhận công đoạn. Vui lòng liên hệ điều phối sản xuất hoặc kỹ sư trưởng xưởng để cập nhật dữ liệu.
+        </div>
+      )}
 
       {/* Form */}
       {showForm && (
