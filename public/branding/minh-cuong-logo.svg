@@ -1,0 +1,13 @@
+<svg width="120" height="40" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Minh Cường Steel</title>
+  <desc id="desc">Simplified Minh Cường Steel brand mark</desc>
+  <rect width="120" height="40" fill="none"/>
+  <g transform="translate(8 4)">
+    <polygon points="0,28 26,0 52,28" fill="#F37021" />
+    <polygon points="13,18 26,6 39,18" fill="#FFFFFF" opacity="0.9" />
+    <circle cx="26" cy="12" r="9" fill="none" stroke="#1F2933" stroke-width="2" />
+    <circle cx="26" cy="12" r="4" fill="#F37021" />
+  </g>
+  <text x="62" y="24" font-family="'Inter', 'Roboto', sans-serif" font-size="16" font-weight="700" fill="#1F2933">MINH CƯỜNG</text>
+  <text x="62" y="34" font-family="'Inter', 'Roboto', sans-serif" font-size="9" font-weight="600" fill="#F37021">STEEL</text>
+</svg>

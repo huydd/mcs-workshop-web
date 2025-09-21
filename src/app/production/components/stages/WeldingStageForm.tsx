@@ -71,7 +71,7 @@ export const WeldingStageForm = ({ data, onChange }: WeldingStageFormProps) => {
           id="qualityCheck"
           checked={data.qualityCheck}
           onChange={(e) => handleChange("qualityCheck", e.target.checked)}
-          className="w-4 h-4 text-[#1B5E20] border-gray-300 rounded focus:ring-[#1B5E20]"
+        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
         />
         <label htmlFor="qualityCheck" className="text-sm font-medium text-[#212121]">
           Kiểm tra mối hàn đạt yêu cầu

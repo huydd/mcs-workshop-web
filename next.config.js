@@ -10,7 +10,7 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    domains: ["localhost"],
+    domains: ["localhost", "minhcuongsteel.com"],
     formats: ["image/webp", "image/avif"],
   },
   compress: true,

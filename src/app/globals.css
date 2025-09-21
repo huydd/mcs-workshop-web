@@ -9,14 +9,14 @@
   }
 
   body {
-    background-color: #fafafa;
-    color: #212121;
+    background-color: #f7f7f7;
+    color: #1f2933;
     font-size: 16px;
     line-height: 1.5;
   }
 
   *:focus {
-    outline: 2px solid #1b5e20;
+    outline: 2px solid #f37021;
     outline-offset: 2px;
   }
 }
@@ -40,6 +40,20 @@
   .card {
     @apply bg-white rounded-factory shadow-factory border border-gray-200 p-lg;
   }
+}
+
+/* Bottom Sheet Animation */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
 }
 
 /* Test class */
