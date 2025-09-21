@@ -40,6 +40,16 @@ const navigationItems = [
     description: 'Theo dõi tiến độ xưởng',
   },
   {
+    name: 'Quản lý xưởng',
+    href: '/workshop' as const,
+    icon: Factory,
+    description: 'Kanban và quản lý task xưởng',
+    subItems: [
+      { name: 'Dashboard Xưởng', href: '/workshop' },
+      { name: 'Demo Xưởng', href: '/workshop/demo' },
+    ],
+  },
+  {
     name: 'Báo cáo',
     href: '/reports' as const,
     icon: BarChart3,

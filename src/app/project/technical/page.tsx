@@ -286,6 +286,30 @@ const TechnicalBomPage = () => {
   const canReview = user?.role === UserRole.PRODUCTION_PLANNER;
   const BOM_STORAGE_KEY = 'bomListData';
 
+  // Utility function to retrieve workshop tasks from localStorage
+  const getWorkshopTasks = (workshopId: string) => {
+    try {
+      const workshopData = localStorage.getItem(`workshop_${workshopId}_tasks`);
+      if (workshopData) {
+        return JSON.parse(workshopData);
+      }
+    } catch (error) {
+      console.error(`Error loading tasks for workshop ${workshopId}:`, error);
+    }
+    return { workshopId, workshopName: '', tasks: [], lastUpdated: null };
+  };
+
+  // Utility function to get all workshop task mappings
+  const getAllWorkshopTaskMappings = () => {
+    const mappings: Record<string, { workshopId: string; workshopName: string; tasks: TaskItem[]; lastUpdated: string }> = {};
+
+    workshops.forEach(workshop => {
+      mappings[workshop.id] = getWorkshopTasks(workshop.id);
+    });
+
+    return mappings;
+  };
+
   const workshops: Workshop[] = [
     { id: 'W1', code: 'W1', name: 'Xưởng kết cấu A', color: 'bg-blue-100 text-blue-800 border-blue-300' },
     { id: 'W2', code: 'W2', name: 'Xưởng gia công B', color: 'bg-green-100 text-green-800 border-green-300' },
@@ -980,9 +1004,51 @@ const TechnicalBomPage = () => {
     localStorage.setItem('bomApprovalStatus', 'rejected');
   };
 
+  const updateWorkshopMappings = (currentTasks: TaskItem[]) => {
+    // Create workshop-to-tasks mapping
+    const workshopTaskMapping: Record<string, TaskItem[]> = {};
+
+    // Initialize empty arrays for all workshops
+    workshops.forEach(workshop => {
+      workshopTaskMapping[workshop.id] = [];
+    });
+
+    // Populate mapping with assigned tasks
+    currentTasks.forEach(task => {
+      task.assignedWorkshops.forEach(workshopId => {
+        if (workshopTaskMapping[workshopId]) {
+          workshopTaskMapping[workshopId].push(task);
+        }
+      });
+    });
+
+    // Save individual workshop mappings for easy access
+    Object.entries(workshopTaskMapping).forEach(([workshopId, workshopTasks]) => {
+      localStorage.setItem(`workshop_${workshopId}_tasks`, JSON.stringify({
+        workshopId,
+        workshopName: workshops.find(w => w.id === workshopId)?.name || '',
+        tasks: workshopTasks,
+        lastUpdated: new Date().toISOString()
+      }));
+    });
+
+    // Also update the main task assignments
+    const assignmentData = {
+      bomData: structuredData,
+      tasks: currentTasks,
+      workshopTaskMapping,
+      assignedAt: new Date().toISOString(),
+      assignedBy: user?.name || 'Production Planner'
+    };
+    localStorage.setItem('taskAssignments', JSON.stringify(assignmentData));
+
+    // Log for debugging
+    console.log('Workshop mappings auto-saved:', workshopTaskMapping);
+  };
+
   const toggleWorkshopAssignment = (taskId: string, workshopId: string) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task => {
         if (task.id === taskId) {
           const isAssigned = task.assignedWorkshops.includes(workshopId);
           const newAssignedWorkshops = isAssigned
@@ -992,8 +1058,12 @@ const TechnicalBomPage = () => {
           return { ...task, assignedWorkshops: newAssignedWorkshops };
         }
         return task;
-      })
-    );
+      });
+
+      // Auto-save to localStorage when assignments change
+      updateWorkshopMappings(updatedTasks);
+      return updatedTasks;
+    });
   };
 
   // Helper functions for task organization
@@ -1041,8 +1111,8 @@ const TechnicalBomPage = () => {
 
     const selectedCount = selectedTasks.size;
 
-    setTasks(prevTasks =>
-      prevTasks.map(task => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task => {
         if (selectedTasks.has(task.id)) {
           const workshopAlreadyAssigned = task.assignedWorkshops.includes(bulkWorkshopSelection);
           const newAssignedWorkshops = workshopAlreadyAssigned
@@ -1052,8 +1122,12 @@ const TechnicalBomPage = () => {
           return { ...task, assignedWorkshops: newAssignedWorkshops };
         }
         return task;
-      })
-    );
+      });
+
+      // Auto-save to localStorage when assignments change
+      updateWorkshopMappings(updatedTasks);
+      return updatedTasks;
+    });
 
     // Clear selections after assignment
     setSelectedTasks(new Set());
@@ -1072,8 +1146,8 @@ const TechnicalBomPage = () => {
 
     if (!draggedTask) return;
 
-    setTasks(prevTasks =>
-      prevTasks.map(task => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task => {
         if (task.id === draggedTask) {
           if (workshopId === null) {
             // Moving to unassigned
@@ -1084,8 +1158,12 @@ const TechnicalBomPage = () => {
           }
         }
         return task;
-      })
-    );
+      });
+
+      // Auto-save to localStorage when assignments change
+      updateWorkshopMappings(updatedTasks);
+      return updatedTasks;
+    });
 
     setDraggedTask(null);
 
@@ -1100,16 +1178,48 @@ const TechnicalBomPage = () => {
   };
 
   const saveTaskAssignments = () => {
+    // Create workshop-to-tasks mapping
+    const workshopTaskMapping: Record<string, TaskItem[]> = {};
+
+    // Initialize empty arrays for all workshops
+    workshops.forEach(workshop => {
+      workshopTaskMapping[workshop.id] = [];
+    });
+
+    // Populate mapping with assigned tasks
+    tasks.forEach(task => {
+      task.assignedWorkshops.forEach(workshopId => {
+        if (workshopTaskMapping[workshopId]) {
+          workshopTaskMapping[workshopId].push(task);
+        }
+      });
+    });
+
     const assignmentData = {
       bomData: structuredData,
       tasks,
+      workshopTaskMapping,
       assignedAt: new Date().toISOString(),
       assignedBy: user?.name || 'Production Planner'
     };
 
     localStorage.setItem('taskAssignments', JSON.stringify(assignmentData));
+
+    // Also save individual workshop mappings for easy access
+    Object.entries(workshopTaskMapping).forEach(([workshopId, workshopTasks]) => {
+      localStorage.setItem(`workshop_${workshopId}_tasks`, JSON.stringify({
+        workshopId,
+        workshopName: workshops.find(w => w.id === workshopId)?.name || '',
+        tasks: workshopTasks,
+        lastUpdated: new Date().toISOString()
+      }));
+    });
+
+    // Log workshop mappings for debugging
+    console.log('Workshop Task Mappings saved to localStorage:', workshopTaskMapping);
+
     setStatus({
-      message: `Đã phân công ${tasks.length} nhiệm vụ sản xuất cho các xưởng.`,
+      message: `Đã phân công ${tasks.length} nhiệm vụ sản xuất cho ${Object.keys(workshopTaskMapping).filter(id => workshopTaskMapping[id].length > 0).length} xưởng.`,
       type: 'success',
     });
   };
