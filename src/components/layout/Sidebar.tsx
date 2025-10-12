@@ -34,17 +34,23 @@ const navigationItems = [
     ],
   },
   {
-    name: 'Ghi nhận công đoạn',
+    name: 'Điều phối Pull System',
     href: '/production' as const,
     icon: Factory,
-    description: 'Theo dõi tiến độ xưởng',
+    description: 'Kế hoạch & Board tổng quan',
+    subItems: [
+      { name: 'Kế hoạch giao hàng', href: '/production/delivery-plan' },
+      { name: 'Board tổng quan', href: '/production/overview' },
+      { name: 'Ghi nhận công đoạn', href: '/production' },
+    ],
   },
   {
     name: 'Quản lý xưởng',
     href: '/workshop' as const,
     icon: Factory,
-    description: 'Kanban và quản lý task xưởng',
+    description: 'Kéo việc & Task xưởng',
     subItems: [
+      { name: 'Kéo việc (Pull Board)', href: '/workshop/pull-board' },
       { name: 'Dashboard Xưởng', href: '/workshop' },
       { name: 'Demo Xưởng', href: '/workshop/demo' },
     ],

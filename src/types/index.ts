@@ -282,3 +282,122 @@ export interface ResponsiveBreakpoint {
   tablet: boolean; // 768-1279px
   desktop: boolean; // ≥ 1280px
 }
+
+// ============================================
+// PULL SYSTEM TYPES
+// ============================================
+
+export interface ProductPart {
+  id: string;
+  partName: string;
+  profile: string;
+  material: string;
+  qtyPerProduct: number;
+  totalQty: number;
+  weight: number;
+}
+
+export type DeliveryProductOrigin = 'bom' | 'plan';
+
+export interface DeliveryProduct {
+  id: string;
+  productName: string;
+  quantity: number;
+  deadline: string;
+  bomRef: string;
+  parts: ProductPart[];
+  origin?: DeliveryProductOrigin;
+}
+
+export interface DeliveryPlan {
+  id: string;
+  name: string;
+  products: DeliveryProduct[];
+  createdBy: string;
+  createdAt: string;
+  status: 'draft' | 'active' | 'completed';
+}
+
+export interface SubTask {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedAt?: string;
+  completedBy?: string;
+}
+
+export interface WorkGroupTask {
+  id: string;
+  sourceType: 'delivery' | 'request';
+  sourceId: string;
+  taskName: string;
+  profile: string;
+  material: string;
+  quantity: number;
+  weight: number;
+  assignedWorkers: string[];
+  estimatedDays: number;
+  actualStart?: string;
+  actualEnd?: string;
+  notes?: string;
+  subtasks: SubTask[];
+  status: 'todo' | 'in_progress' | 'done';
+  claimId?: string;
+  claimStatus?: 'pending' | 'accepted';
+  claimedBy?: string;
+  claimedAt?: string;
+}
+
+export interface WorkGroup {
+  id: string;
+  name: string;
+  description: string;
+  workshopId: string;
+  workshopName: string;
+  tasks: WorkGroupTask[];
+  dueDate: string;
+  progress: number;
+  status: 'todo' | 'in_progress' | 'review' | 'completed';
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkItemClaim {
+  id: string;
+  productId: string;
+  productName: string;
+  origin: DeliveryProductOrigin;
+  workshopId: string;
+  workshopName: string;
+  groupId: string;
+  groupName: string;
+  quantity: number;
+  reservedAt: string;
+  status: 'pending' | 'accepted';
+  acceptedAt?: string;
+}
+
+export interface RequestedPart {
+  id: string;
+  partName: string;
+  profile: string;
+  material: string;
+  quantity: number;
+  weight: number;
+  neededBy: string;
+}
+
+export interface PartRequest {
+  id: string;
+  name: string;
+  fromGroupId: string;
+  fromWorkshopId: string;
+  fromWorkshopName: string;
+  parts: RequestedPart[];
+  status: 'pending' | 'accepted' | 'in_progress' | 'completed';
+  acceptedBy?: string;
+  acceptedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
