@@ -53,21 +53,26 @@ interface BomData {
 const PullBoardPage = () => {
   const { user } = useAuth();
   const {
+    isLoading,
     plans,
     groups,
-    requests,
     createGroup,
     addTaskToGroup,
     updateTaskInGroup,
     createRequest,
     updateRequest,
     getGroupsByWorkshop,
-    getRequestsForWorkshop,
     claims,
     reserveWorkItem,
     updateWorkItemClaim,
     releaseWorkItemClaim,
   } = usePullSystem();
+
+  useEffect(() => {
+    console.log('[PullBoard] User:', user);
+    console.log('[PullBoard] All groups:', groups);
+    console.log('[PullBoard] All claims:', claims);
+  }, [user, groups, claims]);
 
   const [draggedItem, setDraggedItem] = useState<{ type: 'delivery' | 'request'; data: any } | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -180,35 +185,19 @@ const PullBoardPage = () => {
   const workshopId = user?.workshopCode || 'W1';
   const workshopName = user?.workshopName || 'Xưởng';
 
-  const myGroups = useMemo(
-    () => (isWorkshopLead ? getGroupsByWorkshop(workshopId) : []),
-    [isWorkshopLead, getGroupsByWorkshop, workshopId],
-  );
+  const myGroups = useMemo(() => {
+    const result = isWorkshopLead ? getGroupsByWorkshop(workshopId) : [];
+    console.log('[PullBoard] My groups for workshop', workshopId, ':', result);
+    return result;
+  }, [isWorkshopLead, getGroupsByWorkshop, workshopId]);
 
-  const availableRequests = useMemo(
-    () => (isWorkshopLead ? getRequestsForWorkshop(workshopId) : []),
-    [isWorkshopLead, getRequestsForWorkshop, workshopId],
-  );
 
   const availableProducts = useMemo(() => {
     if (!isWorkshopLead) return [] as DeliveryProduct[];
-    return allProducts.filter(product => {
-      const claim = claims.find(c => c.productId === product.id);
-      if (!claim) return true;
-      if (claim.status === 'accepted') return true;
-      return claim.workshopId === workshopId;
-    });
-  }, [allProducts, claims, isWorkshopLead, workshopId]);
+    // Hiển thị TẤT CẢ products, logic disable sẽ được xử lý trong renderProductCard
+    return allProducts;
+  }, [allProducts, isWorkshopLead]);
 
-  const availableBomProducts = useMemo(
-    () => availableProducts.filter(product => (product.origin ?? 'plan') === 'bom'),
-    [availableProducts],
-  );
-
-  const availablePlanProducts = useMemo(
-    () => availableProducts.filter(product => (product.origin ?? 'plan') === 'plan'),
-    [availableProducts],
-  );
 
   useEffect(() => {
     if (!isWorkshopLead) return;
@@ -334,23 +323,74 @@ const PullBoardPage = () => {
     });
   }, [allProducts, claims, releaseWorkItemClaim]);
 
+  // Tạo map của products đã được claim (dựa vào groups.tasks thay vì claims)
+  const claimedProductIds = useMemo(() => {
+    const set = new Set<string>();
+    groups.forEach(group => {
+      group.tasks.forEach(task => {
+        if (task.sourceId) {
+          set.add(task.sourceId);
+        }
+      });
+    });
+    console.log('[PullBoard] Claimed product IDs from groups:', Array.from(set));
+    return set;
+  }, [groups]);
+
+  // Map claims by productId (để lấy thông tin chi tiết)
   const claimByProductId = useMemo(() => {
     const map = new Map<string, WorkItemClaim>();
     claims.forEach(claim => {
       map.set(claim.productId, claim);
     });
+    console.log('[PullBoard] claimByProductId map:', map);
+    console.log('[PullBoard] Available products IDs:', availableProducts.map(p => p.id));
     return map;
-  }, [claims]);
+  }, [claims, availableProducts]);
 
   const renderProductCard = (prod: DeliveryProduct) => {
     const isBom = (prod.origin ?? 'plan') === 'bom';
-    const claim = claimByProductId.get(prod.id);
-    const isPendingMine = claim?.status === 'pending' && claim.workshopId === workshopId;
-    const isAccepted = claim?.status === 'accepted';
-    const acceptedBy =
-      claim?.workshopId ? claim.workshopId.toUpperCase() : claim?.workshopName;
-    const isOwnedByOther = claim ? claim.workshopId !== workshopId : false;
-    const isDisabled = Boolean(isAccepted) || isOwnedByOther;
+
+    // Check if product has been claimed (check in all groups)
+    const isClaimed = claimedProductIds.has(prod.id);
+
+    // Find which group/workshop has this task
+    let taskInfo: { workshopId: string; workshopName: string; status?: string; claimStatus?: string } | null = null;
+    if (isClaimed) {
+      for (const group of groups) {
+        const task = group.tasks.find(t => t.sourceId === prod.id);
+        if (task) {
+          taskInfo = {
+            workshopId: group.workshopId,
+            workshopName: group.workshopName,
+            status: task.status,
+            claimStatus: task.claimStatus,
+          };
+          break;
+        }
+      }
+    }
+
+    // Debug logging
+    if (prod.productName.includes('H250X200X6X6')) {
+      console.log('[renderProductCard] H250X200X6X6:', {
+        productId: prod.id,
+        isClaimed,
+        taskInfo,
+        currentWorkshopId: workshopId,
+      });
+    }
+
+    const isOwnedByMe = taskInfo?.workshopId === workshopId;
+    const isOwnedByOther = taskInfo && taskInfo.workshopId !== workshopId;
+    const isPendingMine = isClaimed && isOwnedByMe && taskInfo?.claimStatus === 'pending';
+    const isAcceptedMine = isClaimed && isOwnedByMe && taskInfo?.claimStatus === 'accepted';
+    const isPendingOther = isClaimed && isOwnedByOther && taskInfo?.claimStatus === 'pending';
+    const isAcceptedOther = isClaimed && isOwnedByOther && taskInfo?.claimStatus === 'accepted';
+    const claimOwner = taskInfo?.workshopName || taskInfo?.workshopId?.toUpperCase();
+
+    // Disable logic: Claimed by anyone EXCEPT pending by current workshop
+    const isDisabled = isClaimed && !isPendingMine;
 
     const classes = cn(
       isBom
@@ -394,14 +434,20 @@ const PullBoardPage = () => {
             >
               SL: {prod.quantity}
             </Badge>
-            {isPendingMine && (
-              <Badge className="text-xs bg-amber-100 text-amber-700">
-                Chờ nhận
-              </Badge>
-            )}
-            {isAccepted && acceptedBy && (
-              <Badge className="text-xs bg-gray-200 text-secondary">
-                Nhận bởi {acceptedBy}
+            {isClaimed && (
+              <Badge
+                className={cn(
+                  'text-xs',
+                  isPendingMine && 'bg-amber-100 text-amber-700',
+                  isAcceptedOther && 'bg-red-100 text-red-700',
+                  isAcceptedMine && 'bg-emerald-100 text-emerald-700',
+                  isPendingOther && 'bg-orange-100 text-orange-700',
+                )}
+              >
+                {isPendingMine && 'Chờ nhận'}
+                {isAcceptedOther && `Đã nhận bởi ${claimOwner}`}
+                {isAcceptedMine && 'Đã nhận'}
+                {isPendingOther && `Đang chờ - ${claimOwner}`}
               </Badge>
             )}
           </div>
@@ -419,6 +465,19 @@ const PullBoardPage = () => {
       </div>
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="text-center" padding="lg">
+          <div className="flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <p className="text-secondary/70">Đang tải dữ liệu...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -659,63 +718,18 @@ const PullBoardPage = () => {
           <Card padding="md">
             <h2 className="font-semibold text-secondary mb-3">Danh sách việc khả dụng</h2>
 
-            {/* BOM Products - Grouped by Profile */}
-            {availableBomProducts.length > 0 && (
-              <div className="space-y-2 mb-4">
-                <h3 className="text-sm font-medium text-secondary/70 flex items-center gap-2">
-                  <Package className="h-3 w-3" />
-                  Từ BOM - Nhóm theo quy cách
-                  <Badge className="text-xs bg-green-100 text-green-700">{availableBomProducts.length} profiles</Badge>
-                </h3>
-                {availableBomProducts.map(renderProductCard)}
+            {/* All Products in one list */}
+            {availableProducts.length > 0 ? (
+              <div className="space-y-2">
+                {availableProducts.map(renderProductCard)}
               </div>
-            )}
-
-            {/* Delivery Plan Products */}
-            {availablePlanProducts.length > 0 && (
-              <div className="space-y-2 mb-4">
-                <h3 className="text-sm font-medium text-secondary/70">Từ kế hoạch giao hàng</h3>
-                {availablePlanProducts.map(renderProductCard)}
-              </div>
-            )}
-
-            {/* No products message */}
-            {availableBomProducts.length + availablePlanProducts.length === 0 && (
+            ) : (
               <div className="text-center py-6 text-secondary/50">
                 <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 <p className="text-xs">Chưa có sản phẩm khả dụng</p>
                 <p className="text-xs mt-1">BOM cần được publish từ trang Technical</p>
               </div>
             )}
-
-            {/* Part Requests */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-secondary/70">Yêu cầu part rời</h3>
-              {availableRequests.length === 0 && (
-                <p className="text-xs text-secondary/50">Chưa có yêu cầu nào</p>
-              )}
-              {availableRequests.map(req => (
-                <div
-                  key={req.id}
-                  draggable
-                  onDragStart={() => handleDragStart('request', req)}
-                  className="p-3 border border-dashed rounded-lg cursor-move hover:border-orange-400 hover:bg-orange-50 transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="font-medium text-sm">{req.name}</div>
-                    <Badge className="text-xs bg-orange-100 text-orange-700">
-                      {req.status}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-secondary/60">
-                    Từ: {req.fromWorkshopName}
-                  </div>
-                  <div className="text-xs text-secondary/50 mt-1">
-                    {req.parts.length} parts · {req.parts.reduce((s, p) => s + p.quantity, 0)} tổng SL
-                  </div>
-                </div>
-              ))}
-            </div>
           </Card>
         </div>
 

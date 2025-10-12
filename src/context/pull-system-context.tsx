@@ -29,6 +29,9 @@ const STORAGE_KEYS = {
 } as const;
 
 interface PullSystemContextValue {
+  // Loading state
+  isLoading: boolean;
+
   // Delivery Plans
   plans: DeliveryPlan[];
   createPlan: (plan: Omit<DeliveryPlan, 'id' | 'createdAt'>) => DeliveryPlan;
@@ -96,6 +99,7 @@ const saveToStorage = <T,>(key: string, value: T): void => {
 };
 
 export const PullSystemProvider = ({ children }: { children: ReactNode }) => {
+  const [isLoading, setIsLoading] = useState(true);
   const [plans, setPlans] = useState<DeliveryPlan[]>([]);
   const [groups, setGroups] = useState<WorkGroup[]>([]);
   const [requests, setRequests] = useState<PartRequest[]>([]);
@@ -103,28 +107,47 @@ export const PullSystemProvider = ({ children }: { children: ReactNode }) => {
 
   // Load from localStorage
   useEffect(() => {
-    setPlans(loadFromStorage(STORAGE_KEYS.PLANS, []));
-    setGroups(loadFromStorage(STORAGE_KEYS.GROUPS, []));
-    setRequests(loadFromStorage(STORAGE_KEYS.REQUESTS, []));
-    setClaims(loadFromStorage(STORAGE_KEYS.CLAIMS, []));
+    const loadedPlans = loadFromStorage(STORAGE_KEYS.PLANS, []);
+    const loadedGroups = loadFromStorage(STORAGE_KEYS.GROUPS, []);
+    const loadedRequests = loadFromStorage(STORAGE_KEYS.REQUESTS, []);
+    const loadedClaims = loadFromStorage(STORAGE_KEYS.CLAIMS, []);
+
+    console.log('[PullSystem] Loading from localStorage:', {
+      plans: loadedPlans.length,
+      groups: loadedGroups.length,
+      requests: loadedRequests.length,
+      claims: loadedClaims.length,
+    });
+
+    setPlans(loadedPlans);
+    setGroups(loadedGroups);
+    setRequests(loadedRequests);
+    setClaims(loadedClaims);
+    setIsLoading(false);
   }, []);
 
   // Auto-save
   useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
     saveToStorage(STORAGE_KEYS.PLANS, plans);
-  }, [plans]);
+  }, [plans, isLoading]);
 
   useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
+    console.log('[PullSystem] Saving groups to localStorage:', groups);
     saveToStorage(STORAGE_KEYS.GROUPS, groups);
-  }, [groups]);
+  }, [groups, isLoading]);
 
   useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
     saveToStorage(STORAGE_KEYS.REQUESTS, requests);
-  }, [requests]);
+  }, [requests, isLoading]);
 
   useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
+    console.log('[PullSystem] Saving claims to localStorage:', claims);
     saveToStorage(STORAGE_KEYS.CLAIMS, claims);
-  }, [claims]);
+  }, [claims, isLoading]);
 
   // Delivery Plans
   const createPlan = useCallback((plan: Omit<DeliveryPlan, 'id' | 'createdAt'>) => {
@@ -338,6 +361,7 @@ export const PullSystemProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo(
     () => ({
+      isLoading,
       plans,
       createPlan,
       updatePlan,
@@ -363,6 +387,7 @@ export const PullSystemProvider = ({ children }: { children: ReactNode }) => {
       releaseWorkItemClaim,
     }),
     [
+      isLoading,
       plans,
       createPlan,
       updatePlan,
