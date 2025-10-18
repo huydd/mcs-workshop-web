@@ -29,16 +29,20 @@ import { cn } from '@/lib/utils';
 
 interface BomTreeNode {
   index: number | null;
+  project_id: string | null;
+  assembly_id: string | null;
   ass_name: string | null;
   part_name: string | null;
   profile: string | null;
   material: string | null;
-  thickness: number | number[] | null;
-  width: number | null;
+  thickness: number | number[] | string | null;
+  width: number | string | null;  // Can be number (90) or string like "(Kg/m)"
   length: number | null;
   qty_per_ass: number | null;
   qty_total: number | null;
   weight_per_part: number | null;
+  weight_combination: number | null;
+  weight_per_ass: number | null;
   weight_total: number | null;
   area_per_ass: number | null;
   area_total: number | null;
@@ -76,6 +80,8 @@ const CSV_HEADERS = [
 
 const RAW_HEADER_KEYS = [
   'index',
+  'project_id',
+  'assembly_id',
   'ass_name',
   'part_name',
   'profile',
@@ -86,6 +92,8 @@ const RAW_HEADER_KEYS = [
   'qty_per_ass',
   'qty_total',
   'weight_per_part',
+  'weight_combination',
+  'weight_per_ass',
   'weight_total',
   'area_per_ass',
   'area_total',
@@ -99,23 +107,27 @@ type RawHeaderKey = (typeof RAW_HEADER_KEYS)[number];
 type HeaderLookup = (row: any[], key: RawHeaderKey) => any;
 
 const fallbackColumnIndex: Record<RawHeaderKey, number> = {
-  index: 0,
-  ass_name: 1,
-  part_name: 2,
-  profile: 3,
-  material: 4,
-  thickness: 5,
-  width: 6,
-  length: 7,
-  qty_per_ass: 8,
-  qty_total: 9,
-  weight_per_part: 10,
-  weight_total: 12,
-  area_per_ass: 13,
-  area_total: 14,
-  welding_machine: 15,
-  hand_welding: 16,
-  note: 17,
+  index: 0,                    // NO
+  project_id: 1,               // Dự án_ID (Project_ID)
+  assembly_id: 2,              // Cấu kiện (Assembly_ID)
+  ass_name: 3,                 // Tên ck (Ass name)
+  part_name: 4,                // Tên chi tiết (Part name)
+  profile: 5,                  // Tiết diện (Profile)
+  material: 6,                 // Vật liệu (Material)
+  thickness: 7,                // Dày (Thick) (mm)
+  width: 8,                    // Rộng (Width) (mm)
+  length: 9,                   // Dài (Length) (mm)
+  qty_per_ass: 10,             // SL/1CK (Qty/Ass)
+  qty_total: 11,               // SL tổng (QtyTotal)
+  weight_per_part: 12,         // KL CT (Weight 1 Part) (kg)
+  weight_combination: 13,      // KL/1CK tổ hợp (Weight 1 combination Ass) (kg)
+  weight_per_ass: 15,          // KL/1CK (Weight 1 Ass) (kg) - NOTE: Column 15, not 14!
+  weight_total: 16,            // KL tổng (Weight Total) (kg)
+  area_per_ass: 17,            // Area 1 Ass (m2)
+  area_total: 18,              // Area Total (m2)
+  welding_machine: 19,         // welding machine (mh)
+  hand_welding: 20,            // hand welding (mh)
+  note: 21,                    // Note
 };
 
 const normalizeHeaderKey = (value: unknown): RawHeaderKey | undefined => {
@@ -129,28 +141,47 @@ const normalizeHeaderKey = (value: unknown): RawHeaderKey | undefined => {
     no: 'index',
     index: 'index',
     stt: 'index',
+    projectid: 'project_id',
+    duanid: 'project_id',
+    assemblyid: 'assembly_id',
+    caukien: 'assembly_id',
     assname: 'ass_name',
     assembly: 'ass_name',
     assemblyname: 'ass_name',
+    tenck: 'ass_name',
     partname: 'part_name',
     partcode: 'part_name',
+    tenchitiet: 'part_name',
     profile: 'profile',
+    tietdien: 'profile',
     material: 'material',
+    vatlieu: 'material',
     thick: 'thickness',
     thickness: 'thickness',
+    day: 'thickness',
     width: 'width',
+    rong: 'width',
     length: 'length',
+    dai: 'length',
     qtyass: 'qty_per_ass',
     quantityass: 'qty_per_ass',
     qtyperass: 'qty_per_ass',
+    slck: 'qty_per_ass',
     qtytotal: 'qty_total',
     quantitytotal: 'qty_total',
     totaltqty: 'qty_total',
+    sltong: 'qty_total',
     weightperpart: 'weight_per_part',
     weight1part: 'weight_per_part',
     weightpart: 'weight_per_part',
+    klct: 'weight_per_part',
+    weightcombination: 'weight_combination',
+    klcktohop: 'weight_combination',
+    weightperass: 'weight_per_ass',
+    klck: 'weight_per_ass',
     weighttotal: 'weight_total',
     weightto: 'weight_total',
+    kltong: 'weight_total',
     areaperass: 'area_per_ass',
     area1ass: 'area_per_ass',
     areatotal: 'area_total',
@@ -299,19 +330,44 @@ const TechnicalBomPage = () => {
     return trimmed.length ? trimmed : null;
   };
 
-  const parseThickness = (value: unknown): number | number[] | null => {
+  const parseThickness = (value: unknown): number | number[] | string | null => {
     if (value === null || value === undefined || value === '') return null;
     if (typeof value === 'number') return value;
-    const parts = value
-      .toString()
+    const strValue = value.toString().trim();
+
+    // Try to parse as number(s)
+    const parts = strValue
       .split(/[^0-9.]+/)
       .map(p => p.trim())
       .filter(Boolean)
       .map(p => Number(p.replace(/,/g, '.')))
       .filter(num => Number.isFinite(num));
-    if (parts.length === 0) return null;
+
+    if (parts.length === 0) {
+      // If no numbers found, return as string (e.g., "D20", "L100*6")
+      return strValue;
+    }
     if (parts.length === 1) return parts[0];
     return parts;
+  };
+
+  const parseWidth = (value: unknown): number | string | null => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') return value;
+
+    const strValue = value.toString().trim();
+
+    // Check if it looks like a unit or special string like "(Kg/m)"
+    if (strValue.startsWith('(') || strValue.includes('/')) {
+      return strValue;
+    }
+
+    // Try to parse as number
+    const numValue = toNumber(strValue);
+    if (numValue !== null) return numValue;
+
+    // Return as string if not a number
+    return strValue;
   };
 
   const createParent = (
@@ -323,16 +379,20 @@ const TechnicalBomPage = () => {
 
     return {
       index,
+      project_id: toStringValue(lookup(row, 'project_id')),
+      assembly_id: toStringValue(lookup(row, 'assembly_id')),
       ass_name: toStringValue(lookup(row, 'ass_name')),
       part_name: toStringValue(lookup(row, 'part_name')),
       profile: toStringValue(lookup(row, 'profile')),
       material: toStringValue(lookup(row, 'material')),
       thickness: parseThickness(lookup(row, 'thickness')),
-      width: toNumber(lookup(row, 'width')),
+      width: parseWidth(lookup(row, 'width')),
       length: toNumber(lookup(row, 'length')),
       qty_per_ass: toNumber(lookup(row, 'qty_per_ass')),
       qty_total: toNumber(lookup(row, 'qty_total')),
       weight_per_part: toNumber(lookup(row, 'weight_per_part')),
+      weight_combination: toNumber(lookup(row, 'weight_combination')),
+      weight_per_ass: toNumber(lookup(row, 'weight_per_ass')),
       weight_total: toNumber(lookup(row, 'weight_total')),
       area_per_ass: toNumber(lookup(row, 'area_per_ass')),
       area_total: toNumber(lookup(row, 'area_total')),
@@ -343,26 +403,35 @@ const TechnicalBomPage = () => {
     };
   };
 
-  const createChild = (row: any[], lookup: HeaderLookup): BomTreeNode => ({
-    index: null,
-    ass_name: toStringValue(lookup(row, 'ass_name')),
-    part_name: toStringValue(lookup(row, 'part_name')),
-    profile: toStringValue(lookup(row, 'profile')),
-    material: toStringValue(lookup(row, 'material')),
-    thickness: parseThickness(lookup(row, 'thickness')),
-    width: toNumber(lookup(row, 'width')),
-    length: toNumber(lookup(row, 'length')),
-    qty_per_ass: toNumber(lookup(row, 'qty_per_ass')),
-    qty_total: toNumber(lookup(row, 'qty_total')),
-    weight_per_part: toNumber(lookup(row, 'weight_per_part')),
-    weight_total: toNumber(lookup(row, 'weight_total')),
-    area_per_ass: toNumber(lookup(row, 'area_per_ass')),
-    area_total: toNumber(lookup(row, 'area_total')),
-    welding_machine: toNumber(lookup(row, 'welding_machine')),
-    hand_welding: toNumber(lookup(row, 'hand_welding')),
-    note: toStringValue(lookup(row, 'note')),
-    children: [],
-  });
+  const createChild = (row: any[], lookup: HeaderLookup): BomTreeNode => {
+    // Child rows have the EXACT SAME column structure as parent rows
+    // The only difference is column 0 (index) is empty
+    // All other columns should map exactly the same way
+    return {
+      index: null,
+      project_id: toStringValue(lookup(row, 'project_id')),
+      assembly_id: toStringValue(lookup(row, 'assembly_id')),
+      ass_name: toStringValue(lookup(row, 'ass_name')),
+      part_name: toStringValue(lookup(row, 'part_name')),
+      profile: toStringValue(lookup(row, 'profile')),
+      material: toStringValue(lookup(row, 'material')),
+      thickness: parseThickness(lookup(row, 'thickness')),
+      width: parseWidth(lookup(row, 'width')),
+      length: toNumber(lookup(row, 'length')),
+      qty_per_ass: toNumber(lookup(row, 'qty_per_ass')),
+      qty_total: toNumber(lookup(row, 'qty_total')),
+      weight_per_part: toNumber(lookup(row, 'weight_per_part')),
+      weight_combination: toNumber(lookup(row, 'weight_combination')),
+      weight_per_ass: toNumber(lookup(row, 'weight_per_ass')),
+      weight_total: toNumber(lookup(row, 'weight_total')),
+      area_per_ass: toNumber(lookup(row, 'area_per_ass')),
+      area_total: toNumber(lookup(row, 'area_total')),
+      welding_machine: toNumber(lookup(row, 'welding_machine')),
+      hand_welding: toNumber(lookup(row, 'hand_welding')),
+      note: toStringValue(lookup(row, 'note')),
+      children: [],
+    };
+  };
 
   const processRowsIncrementally = useCallback(
     (rows: any[][], startRow: number, lookup: HeaderLookup) =>
@@ -1281,6 +1350,7 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
 
   const formatValue = (value: unknown): string => {
     if (value === null || value === undefined) return '—';
+    if (value === '' || value === 0) return '—';
     if (Array.isArray(value)) {
       return value.join(' x ');
     }
@@ -1288,34 +1358,39 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
   };
 
   const tableHeaders = [
-    'STT',
+    'NO',
+    'Dự án_ID',
     'Cấu kiện',
-    'Chi tiết',
-    'Quy cách',
+    'Tên ck',
+    'Tên chi tiết',
+    'Tiết diện',
     'Vật liệu',
     'Dày',
     'Rộng',
     'Dài',
-    'SL/1CK',
-    'SL Tổng',
-    'KL CT',
-    'KL/1CKL',
-    'KL Tổng',
-    'Hàn máy',
-    'Hàn tay',
-    'Ghi chú',
+    'SL/CK',
+    'SL tổng',
+    'KL_CT',
+    'KL/CK tổ hợp',
+    'KL/CK',
+    'KL tổng',
+    'Area 1 Ass',
+    'Area Total',
+    'welding machine',
+    'hand welding',
+    'Note',
   ];
 
   return (
-    <div className="overflow-auto max-h-[50vh] border border-gray-200 rounded-lg">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-50">
-            <th className="w-8 border border-gray-200 p-2"></th>
+    <div className="overflow-auto max-h-[60vh] border border-gray-300 rounded-lg shadow-sm">
+      <table className="w-full border-collapse text-sm">
+        <thead className="sticky top-0 z-10">
+          <tr className="bg-gradient-to-r from-gray-100 to-gray-50 border-b-2 border-gray-300">
+            <th className="w-10 border-r border-gray-300 p-3 bg-gray-100"></th>
             {tableHeaders.map((header, index) => (
               <th
                 key={index}
-                className="border border-gray-200 p-2 text-left text-xs font-medium text-gray-700 whitespace-nowrap"
+                className="border-r border-gray-300 px-3 py-3 text-left text-xs font-semibold text-gray-700 whitespace-nowrap bg-gray-50 last:border-r-0"
               >
                 {header}
               </th>
@@ -1325,70 +1400,82 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
         <tbody>
           {data.map(parent => (
             <React.Fragment key={`parent-${parent.index}`}>
-              <tr className="bg-white hover:bg-gray-50">
-                <td className="border border-gray-200 p-2">
+              <tr className="bg-white hover:bg-blue-50 transition-colors border-b border-gray-200">
+                <td className="border-r border-gray-300 p-2 bg-gray-50">
                   {parent.children.length > 0 && (
                     <button
                       onClick={() => toggleRowExpansion(parent.index!)}
-                      className="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-100"
+                      className="flex items-center justify-center w-6 h-6 rounded hover:bg-blue-100 transition-colors"
                     >
                       {expandedRows.has(parent.index!) ? (
-                        <ChevronDown className="h-4 w-4" />
+                        <ChevronDown className="h-4 w-4 text-blue-600" />
                       ) : (
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-4 w-4 text-gray-500" />
                       )}
                     </button>
                   )}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm font-medium">
+                <td className="border-r border-gray-200 px-3 py-2.5 font-semibold text-blue-700 bg-blue-50">
                   {formatValue(parent.index)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
+                  {formatValue(parent.project_id)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5 font-medium">
+                  {formatValue(parent.assembly_id)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.ass_name)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.part_name)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.profile)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.material)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.thickness)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.width)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.length)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.qty_per_ass)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center font-medium">
                   {formatValue(parent.qty_total)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
                   {formatValue(parent.weight_per_part)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
+                  {formatValue(parent.weight_combination)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
+                  {formatValue(parent.weight_per_ass)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right font-medium">
                   {formatValue(parent.weight_total)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
                   {formatValue(parent.area_per_ass)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right font-medium">
                   {formatValue(parent.area_total)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.welding_machine)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.hand_welding)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="px-3 py-2.5 text-xs text-gray-600">
                   {formatValue(parent.note)}
                 </td>
               </tr>
@@ -1396,58 +1483,70 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
                 parent.children.map((child, childIndex) => (
                   <tr
                     key={`child-${parent.index}-${childIndex}`}
-                    className="bg-gray-25"
+                    className="bg-gray-50/50 hover:bg-gray-100 transition-colors border-b border-gray-100"
                   >
-                    <td className="border border-gray-200 p-2"></td>
-                    <td className="border border-gray-200 p-2 text-sm text-gray-500">
+                    <td className="border-r border-gray-300 p-2 bg-gray-100"></td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-400 text-xs bg-gray-50">
                       —
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
+                      {formatValue(child.project_id)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
+                      {formatValue(child.assembly_id)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-700">
                       {formatValue(child.ass_name)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-700">
                       {formatValue(child.part_name)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
                       {formatValue(child.profile)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
                       {formatValue(child.material)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.thickness)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.width)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.length)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.qty_per_ass)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-700">
                       {formatValue(child.qty_total)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
                       {formatValue(child.weight_per_part)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
+                      {formatValue(child.weight_combination)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
+                      {formatValue(child.weight_per_ass)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-700">
                       {formatValue(child.weight_total)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
                       {formatValue(child.area_per_ass)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-700">
                       {formatValue(child.area_total)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.welding_machine)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.hand_welding)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="px-3 py-2 text-xs text-gray-500">
                       {formatValue(child.note)}
                     </td>
                   </tr>

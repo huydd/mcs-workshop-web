@@ -19,34 +19,19 @@ import { cn } from '@/lib/utils';
 const navigationItems = [
   {
     name: 'Dashboard',
-    href: '/' as const,
+    href: '/',
     icon: LayoutDashboard,
     description: 'Tổng quan hệ thống',
   },
   {
-    name: 'Luồng BOM',
-    href: '/project' as const,
+    name: 'Quản lý BOM',
+    href: '/project/technical',
     icon: GitBranch,
-    description: 'Quản lý quy trình sản xuất',
-    subItems: [
-      { name: 'BOM List', href: '/project' },
-      { name: 'Advanced Tool', href: '/project/technical' },
-    ],
-  },
-  {
-    name: 'Điều phối Pull System',
-    href: '/production' as const,
-    icon: Factory,
-    description: 'Kế hoạch & Board tổng quan',
-    subItems: [
-      { name: 'Kế hoạch giao hàng', href: '/production/delivery-plan' },
-      { name: 'Board tổng quan', href: '/production/overview' },
-      { name: 'Ghi nhận công đoạn', href: '/production' },
-    ],
+    description: 'Chia BOM',
   },
   {
     name: 'Quản lý xưởng',
-    href: '/workshop' as const,
+    href: '/workshop',
     icon: Factory,
     description: 'Kéo việc & Task xưởng',
     subItems: [
@@ -57,25 +42,25 @@ const navigationItems = [
   },
   {
     name: 'Báo cáo',
-    href: '/reports' as const,
+    href: '/reports',
     icon: BarChart3,
     description: 'Thống kê và phân tích',
   },
   {
     name: 'Nhân viên',
-    href: '/users' as const,
+    href: '/users',
     icon: Users,
     description: 'Quản lý tài khoản',
   },
   {
     name: 'Kho vật tư',
-    href: '/warehouse' as const,
+    href: '/warehouse',
     icon: Archive,
     description: 'Quản lý tồn kho',
   },
   {
     name: 'Cài đặt',
-    href: '/settings' as const,
+    href: '/settings',
     icon: Settings,
     description: 'Thiết lập hệ thống',
   },
@@ -112,7 +97,7 @@ export const Sidebar = () => {
           return (
             <div key={item.href} className="space-y-1">
               <Link
-                href={item.href as string}
+                href={item.href}
                 className={cn(
                   'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative',
                   isActive
@@ -157,7 +142,7 @@ export const Sidebar = () => {
                     return (
                       <Link
                         key={subItem.href}
-                        href={subItem.href as string}
+                        href={subItem.href}
                         className={cn(
                           'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors relative',
                           isSubItemActive
