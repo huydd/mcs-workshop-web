@@ -33,11 +33,10 @@ const navigationItems = [
     name: 'Quản lý xưởng',
     href: '/workshop',
     icon: Factory,
-    description: 'Kéo việc & Task xưởng',
+    description: 'Công việc xưởng',
     subItems: [
-      { name: 'Kéo việc (Pull Board)', href: '/workshop/pull-board' },
-      { name: 'Dashboard Xưởng', href: '/workshop' },
-      { name: 'Demo Xưởng', href: '/workshop/demo' },
+      { name: 'Nhận công việc', href: '/workshop/pull-board' },
+      { name: 'Bảng kiểm soát', href: '/workshop' },
     ],
   },
   {

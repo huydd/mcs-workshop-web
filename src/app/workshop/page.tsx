@@ -70,6 +70,7 @@ interface WorkshopTask {
     welding_machine: number | null;
     hand_welding: number | null;
     note: string | null;
+    completionPercent?: number; // 0, 25, 50, 75, 100
   }[];
   totalQty: number;
   totalWeight: number;
@@ -83,6 +84,7 @@ interface WorkshopTask {
   workInstructions?: string;
   checklist: TaskChecklistItem[];
   status: 'todo' | 'in_progress' | 'review' | 'done';
+  subStage?: string; // Current stage within the column
   progress: number; // 0-100
   isDelayed: boolean;
   delayExplanation?: string;
@@ -1089,6 +1091,7 @@ interface TaskCardProps {
 
 const TaskCard = ({ task, workers, zones, onTaskUpdate, onDelayExplanation, onTaskEdit, onWorkerAssign, onComment, onDragStart, onDragEnd, isDragging, view }: TaskCardProps) => {
   const [expanded, setExpanded] = useState(false);
+  const [showSubtasks, setShowSubtasks] = useState(false);
 
   const assignedWorkerNames = task.assignedWorkers
     .map(workerId => workers.find(w => w.id === workerId)?.name)
@@ -1098,37 +1101,88 @@ const TaskCard = ({ task, workers, zones, onTaskUpdate, onDelayExplanation, onTa
   const assignedZone = zones.find(z => z.id === task.assignedZone);
   const daysRemaining = task.endDate ? calculateDaysRemaining(task.endDate) : null;
 
+  // Calculate real progress from subtasks
+  const completedSubtasks = task.subtasks.filter(st => (st.completionPercent || 0) === 100).length;
+  const totalSubtasks = task.subtasks.length;
+  const realProgress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+
+  // Get stage configuration for current column
+  const getStagesByStatus = (status: WorkshopTask['status']): string[] => {
+    const stageMap = {
+      'todo': ['TODO', 'Đang kế hoạch', 'Đã kế hoạch'],
+      'in_progress': ['Gá tổ hợp', 'Gá hoàn thiện', 'Hàn Hoàn thiện'],
+      'review': ['Đang nhiệm thu', 'Pass kiểm tra'],
+      'done': ['Đã nhập kho', 'Đã xuất kho']
+    };
+    return stageMap[status] || [];
+  };
+
+  const currentStages = getStagesByStatus(task.status);
+  const currentSubStage = task.subStage || (currentStages[0] || '');
+
   const getPriorityConfig = (priority: WorkshopTask['priority']) => {
     const configs = {
       urgent: {
         label: 'Khẩn cấp',
         color: 'bg-red-100 text-red-800 border-red-200',
-        icon: <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0L16 8H12V16H4V8H0L8 0Z"/></svg>,
-        arrowCount: 2
+        icon: (
+          <div className="flex flex-col gap-0">
+            <svg className="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 2L12 6H4L8 2Z"/>
+            </svg>
+            <svg className="w-2.5 h-2.5 -mt-1" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 2L12 6H4L8 2Z"/>
+            </svg>
+          </div>
+        )
       },
       high: {
         label: 'Ưu tiên cao',
         color: 'bg-orange-100 text-orange-800 border-orange-200',
-        icon: <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0L16 8H12V16H4V8H0L8 0Z"/></svg>,
-        arrowCount: 1
+        icon: (
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 2L12 6H4L8 2Z"/>
+          </svg>
+        )
       },
       medium: {
         label: 'Bình thường',
         color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-        icon: <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><path d="M4 8L12 8M8 4L12 8L8 12"/></svg>,
-        arrowCount: 0
+        icon: (
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 8L12 8"/>
+          </svg>
+        )
       },
       low: {
         label: 'Thấp',
         color: 'bg-green-100 text-green-800 border-green-200',
-        icon: <svg className="w-3 h-3 rotate-180" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0L16 8H12V16H4V8H0L8 0Z"/></svg>,
-        arrowCount: -1
+        icon: (
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 10L4 6H12L8 10Z"/>
+          </svg>
+        )
       }
     };
     return configs[priority];
   };
 
   const priorityConfig = getPriorityConfig(task.priority);
+
+  const updateSubtaskCompletion = (subtaskIndex: number, percent: number) => {
+    // Update subtask completion and save to localStorage
+    const updatedSubtasks = task.subtasks.map((st, idx) =>
+      idx === subtaskIndex ? { ...st, completionPercent: percent } : st
+    );
+
+    const updatedTask = { ...task, subtasks: updatedSubtasks };
+    onTaskEdit(updatedTask);
+  };
+
+  const updateSubStage = (newStage: string) => {
+    const updatedTask = { ...task, subStage: newStage };
+    onTaskEdit(updatedTask);
+  };
 
   return (
     <div
@@ -1166,22 +1220,44 @@ const TaskCard = ({ task, workers, zones, onTaskUpdate, onDelayExplanation, onTa
           </div>
           <Badge className={cn(
             "text-xs font-medium",
-            task.progress > 75 ? "bg-green-100 text-green-800" :
-            task.progress > 50 ? "bg-blue-100 text-blue-800" :
-            task.progress > 25 ? "bg-yellow-100 text-yellow-800" :
+            realProgress > 75 ? "bg-green-100 text-green-800" :
+            realProgress > 50 ? "bg-blue-100 text-blue-800" :
+            realProgress > 25 ? "bg-yellow-100 text-yellow-800" :
             "bg-gray-100 text-gray-800"
           )}>
-            {task.progress}%
+            {completedSubtasks}/{totalSubtasks}
           </Badge>
         </div>
 
-        {/* Task Title */}
+        {/* Task Title - Combined Name + Profile */}
         <div className="mb-3">
-          <h4 className="font-semibold text-gray-900 text-sm leading-tight mb-1">{task.profile}</h4>
+          <h4 className="font-semibold text-gray-900 text-sm leading-tight mb-1">
+            {task.subtasks[0]?.ass_name || task.profile} - {task.profile}
+          </h4>
           {task.material && (
             <p className="text-xs text-gray-600">{task.material}</p>
           )}
         </div>
+
+        {/* Stage Selector */}
+        {currentStages.length > 0 && (
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Giai đoạn
+            </label>
+            <select
+              value={currentSubStage}
+              onChange={(e) => updateSubStage(e.target.value)}
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md bg-white"
+            >
+              {currentStages.map((stage) => (
+                <option key={stage} value={stage}>
+                  {stage}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Task Metadata */}
         <div className="space-y-2 mb-3">
@@ -1198,11 +1274,6 @@ const TaskCard = ({ task, workers, zones, onTaskUpdate, onDelayExplanation, onTa
                 <span>Chưa có hạn</span>
               )}
             </div>
-
-            <div className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              <span>{task.assignedWorkers.length || 0} người làm</span>
-            </div>
           </div>
 
           {assignedZone && (
@@ -1212,18 +1283,6 @@ const TaskCard = ({ task, workers, zones, onTaskUpdate, onDelayExplanation, onTa
                 {assignedZone.name}
               </Badge>
             </div>
-          )}
-
-          {task.assignedWorkers.length === 0 && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="text-xs py-1 px-2 w-full"
-              onClick={() => onWorkerAssign?.(task.id)}
-            >
-              <Users className="h-3 w-3 mr-1" />
-              Phân công nhân viên
-            </Button>
           )}
         </div>
 

@@ -236,12 +236,29 @@ const parseBomCsv = (content: string) => {
     return fallback !== undefined ? cells[fallback]?.trim() ?? '' : '';
   };
 
-  const tasks: BomTask[] = [];
+  // Group by (profile + ass_name) combination
+  type GroupKey = string;
+  const groups = new Map<GroupKey, {
+    profile: string;
+    ass_name: string;
+    material: string;
+    stage: ProcessStage;
+    quantity: number;
+    totalWeight: number;
+    notes: string[];
+  }>();
 
   for (let i = 1; i < rows.length; i += 1) {
     const line = rows[i];
     if (!line) continue;
     const cells = line.split(',');
+
+    const profile = getValue(cells, 'profile');
+    const ass_name = getValue(cells, 'ass_name');
+    const material = getValue(cells, 'material');
+
+    // Skip rows without profile (empty rows or invalid data)
+    if (!profile) continue;
 
     const quantity =
       toNumber(getValue(cells, 'qty_total')) ??
@@ -251,28 +268,55 @@ const parseBomCsv = (content: string) => {
       toNumber(getValue(cells, 'weight_total')) ??
       toNumber(getValue(cells, 'weight_per_part')) ??
       0;
+    const note = getValue(cells, 'note');
 
-    tasks.push({
-      id: `bom-${Date.now()}-${i}`,
-      componentCode:
-        getValue(cells, 'part_name') ||
-        getValue(cells, 'profile') ||
-        getValue(cells, 'ass_name') ||
-        `BL-${i}`,
-      name:
-        getValue(cells, 'ass_name') ||
-        getValue(cells, 'part_name') ||
-        getValue(cells, 'profile') ||
-        `Hạng mục ${i}`,
-      stage: stageFromString(getValue(cells, 'ass_name') || ''),
-      quantity,
-      totalWeight,
+    // Create unique key from profile + ass_name
+    // Use "UNKNOWN" if ass_name is empty to group all items with same profile but no ass_name
+    const groupKey = `${profile}::${ass_name || 'UNKNOWN'}`;
+
+    const existing = groups.get(groupKey);
+    if (existing) {
+      // Accumulate quantity and weight
+      existing.quantity += quantity;
+      existing.totalWeight += totalWeight;
+      if (note && !existing.notes.includes(note)) {
+        existing.notes.push(note);
+      }
+    } else {
+      // Create new group
+      groups.set(groupKey, {
+        profile,
+        ass_name,
+        material,
+        stage: stageFromString(ass_name || ''),
+        quantity,
+        totalWeight,
+        notes: note ? [note] : [],
+      });
+    }
+  }
+
+  // Convert groups to tasks
+  const tasks: BomTask[] = Array.from(groups.entries()).map(([key, group], index) => {
+    // Generate a descriptive name
+    const nameParts = [];
+    if (group.ass_name) nameParts.push(group.ass_name);
+    nameParts.push(group.profile);
+    if (group.material) nameParts.push(`(${group.material})`);
+
+    return {
+      id: `bom-${Date.now()}-${index}`,
+      componentCode: group.profile,
+      name: nameParts.join(' '),
+      stage: group.stage,
+      quantity: group.quantity,
+      totalWeight: group.totalWeight,
       plannedStart: undefined,
       plannedEnd: undefined,
       priority: undefined,
-      notes: getValue(cells, 'note') || undefined,
-    });
-  }
+      notes: group.notes.length > 0 ? group.notes.join('; ') : undefined,
+    };
+  });
 
   return { tasks, warnings };
 };
