@@ -594,6 +594,16 @@ const WorkshopPage = () => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  const handleTaskChange = (updatedTask: WorkshopTask) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === updatedTask.id ? updatedTask : task
+      );
+      saveWorkshopData(updatedTasks);
+      return updatedTasks;
+    });
+  };
+
   const updateTaskProgress = (
     taskId: string,
     checklistItemId: string,
@@ -1050,6 +1060,7 @@ const WorkshopPage = () => {
           onTaskUpdate={updateTaskProgress}
           onDelayExplanation={openDelayModal}
           onTaskEdit={openTaskModal}
+          onTaskChange={handleTaskChange}
           onMoveTask={moveTaskToStatus}
           onWorkerAssign={openWorkerModal}
           onComment={taskId => {
@@ -1065,6 +1076,7 @@ const WorkshopPage = () => {
           onTaskUpdate={updateTaskProgress}
           onDelayExplanation={openDelayModal}
           onTaskEdit={openTaskModal}
+          onTaskChange={handleTaskChange}
           onWorkerAssign={openWorkerModal}
           onComment={taskId => {
             setCommentTaskId(taskId);
@@ -1185,6 +1197,7 @@ interface KanbanBoardProps {
   ) => void;
   onDelayExplanation: (taskId: string) => void;
   onTaskEdit: (task: WorkshopTask) => void;
+  onTaskChange: (task: WorkshopTask) => void;
   onMoveTask: (taskId: string, newStatus: WorkshopTask['status']) => void;
   onWorkerAssign: (taskId: string) => void;
   onComment: (taskId: string) => void;
@@ -1198,6 +1211,7 @@ const KanbanBoard = ({
   onTaskUpdate,
   onDelayExplanation,
   onTaskEdit,
+  onTaskChange,
   onMoveTask,
   onWorkerAssign,
   onComment,
@@ -1288,6 +1302,7 @@ const KanbanBoard = ({
                     onTaskUpdate={onTaskUpdate}
                     onDelayExplanation={onDelayExplanation}
                     onTaskEdit={onTaskEdit}
+                    onTaskChange={onTaskChange}
                     onWorkerAssign={onWorkerAssign}
                     onComment={onComment}
                     onDragStart={() => handleDragStart(task.id)}
@@ -1324,6 +1339,7 @@ interface TaskListProps {
   ) => void;
   onDelayExplanation: (taskId: string) => void;
   onTaskEdit: (task: WorkshopTask) => void;
+  onTaskChange: (task: WorkshopTask) => void;
   onWorkerAssign: (taskId: string) => void;
   onComment: (taskId: string) => void;
 }
@@ -1335,6 +1351,7 @@ const TaskList = ({
   onTaskUpdate,
   onDelayExplanation,
   onTaskEdit,
+  onTaskChange,
   onWorkerAssign,
   onComment,
 }: TaskListProps) => {
@@ -1349,6 +1366,7 @@ const TaskList = ({
           onTaskUpdate={onTaskUpdate}
           onDelayExplanation={onDelayExplanation}
           onTaskEdit={onTaskEdit}
+          onTaskChange={onTaskChange}
           onWorkerAssign={onWorkerAssign}
           onComment={onComment}
           view="list"
@@ -1370,6 +1388,7 @@ interface TaskCardProps {
   ) => void;
   onDelayExplanation: (taskId: string) => void;
   onTaskEdit: (task: WorkshopTask) => void;
+  onTaskChange?: (task: WorkshopTask) => void; // Update task without opening modal
   onWorkerAssign?: (taskId: string) => void;
   onComment?: (taskId: string) => void;
   onDragStart?: () => void;
@@ -1385,6 +1404,7 @@ const TaskCard = ({
   onTaskUpdate,
   onDelayExplanation,
   onTaskEdit,
+  onTaskChange,
   onWorkerAssign,
   onComment,
   onDragStart,
@@ -1535,12 +1555,16 @@ const TaskCard = ({
 
   const updateSubStage = (newStage: string) => {
     const updatedTask = { ...task, subStage: newStage };
-    onTaskEdit(updatedTask);
+    if (onTaskChange) {
+      onTaskChange(updatedTask);
+    }
   };
 
   const updatePriority = (newPriority: WorkshopTask['priority']) => {
     const updatedTask = { ...task, priority: newPriority };
-    onTaskEdit(updatedTask);
+    if (onTaskChange) {
+      onTaskChange(updatedTask);
+    }
     setShowPriorityDropdown(false);
   };
 
