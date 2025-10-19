@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   Search,
   Filter,
-  MoreHorizontal,
   ChevronDown,
   Edit3,
   MessageSquare,
@@ -160,11 +159,8 @@ const WorkshopPage = () => {
   const [zones, setZones] = useState<WorkshopZone[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterZone, setFilterZone] = useState<string>('all');
-  const [filterWorker, setFilterWorker] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterSpeed, setFilterSpeed] = useState<string>('all'); // 'fast', 'slow', 'ontime'
-  const [showFilters, setShowFilters] = useState(false);
   const [showDelayModal, setShowDelayModal] = useState(false);
   const [delayModalTaskId, setDelayModalTaskId] = useState<string | null>(null);
   const [kanbanView, setKanbanView] = useState(true);
@@ -747,10 +743,6 @@ const WorkshopPage = () => {
 
       const matchesStatus =
         filterStatus === 'all' || task.status === filterStatus;
-      const matchesZone =
-        filterZone === 'all' || task.assignedZone === filterZone;
-      const matchesWorker =
-        filterWorker === 'all' || task.assignedWorkers.includes(filterWorker);
       const matchesPriority =
         filterPriority === 'all' || task.priority === filterPriority;
 
@@ -769,8 +761,6 @@ const WorkshopPage = () => {
       return (
         matchesSearch &&
         matchesStatus &&
-        matchesZone &&
-        matchesWorker &&
         matchesPriority &&
         matchesSpeed
       );
@@ -795,15 +785,7 @@ const WorkshopPage = () => {
     });
 
     return filtered;
-  }, [
-    tasks,
-    searchTerm,
-    filterStatus,
-    filterZone,
-    filterWorker,
-    filterPriority,
-    filterSpeed,
-  ]);
+  }, [tasks, searchTerm, filterStatus, filterPriority, filterSpeed]);
 
   const kanbanColumns = [
     {
@@ -872,176 +854,89 @@ const WorkshopPage = () => {
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Tìm kiếm công việc..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
+        {/* Search and Filters - Optimized */}
+        <div className="flex items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Tìm kiếm công việc..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-10 h-9"
+            />
+          </div>
 
-            {/* Inline Filters */}
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-32"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="todo">Chưa làm</option>
-              <option value="in_progress">Đang làm</option>
-              <option value="review">Kiểm tra</option>
-              <option value="done">Xong</option>
-            </select>
+          {/* Quick Filters */}
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+            className="px-3 h-9 border border-gray-300 rounded-lg text-sm bg-white hover:border-gray-400 transition-colors"
+          >
+            <option value="all">Tất cả trạng thái</option>
+            <option value="todo">Chưa làm</option>
+            <option value="in_progress">Đang làm</option>
+            <option value="review">Kiểm tra</option>
+            <option value="done">Xong</option>
+          </select>
 
-            <select
-              value={filterPriority}
-              onChange={e => setFilterPriority(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-32"
-            >
-              <option value="all">Tất cả mức độ</option>
-              <option value="urgent">Khẩn cấp</option>
-              <option value="high">Ưu tiên cao</option>
-              <option value="medium">Bình thường</option>
-              <option value="low">Thấp</option>
-            </select>
+          <select
+            value={filterPriority}
+            onChange={e => setFilterPriority(e.target.value)}
+            className="px-3 h-9 border border-gray-300 rounded-lg text-sm bg-white hover:border-gray-400 transition-colors"
+          >
+            <option value="all">Tất cả mức độ</option>
+            <option value="urgent">Khẩn cấp</option>
+            <option value="high">Cao</option>
+            <option value="medium">Trung bình</option>
+            <option value="low">Thấp</option>
+          </select>
 
+          {/* Speed Filter Buttons - Compact */}
+          <div className="flex gap-2 ml-auto">
             <Button
-              variant="secondary"
+              variant={filterSpeed === 'fast' ? 'primary' : 'secondary'}
               size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2"
+              onClick={() =>
+                setFilterSpeed(filterSpeed === 'fast' ? 'all' : 'fast')
+              }
+              className="h-9 px-4"
             >
-              <Filter className="h-4 w-4" />
-              Thêm bộ lọc
+              Gấp
+            </Button>
+            <Button
+              variant={filterSpeed === 'slow' ? 'danger' : 'secondary'}
+              size="sm"
+              onClick={() =>
+                setFilterSpeed(filterSpeed === 'slow' ? 'all' : 'slow')
+              }
+              className="h-9 px-4"
+            >
+              Trễ hạn
+            </Button>
+            <Button
+              variant={filterSpeed === 'ontime' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() =>
+                setFilterSpeed(filterSpeed === 'ontime' ? 'all' : 'ontime')
+              }
+              className="h-9 px-4"
+            >
+              Đúng hạn
             </Button>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Speed Filter Buttons */}
-            <div className="flex gap-1">
-              <Button
-                variant={filterSpeed === 'fast' ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() =>
-                  setFilterSpeed(filterSpeed === 'fast' ? 'all' : 'fast')
-                }
-                className="px-3"
-              >
-                Gấp
-              </Button>
-              <Button
-                variant={filterSpeed === 'slow' ? 'danger' : 'secondary'}
-                size="sm"
-                onClick={() =>
-                  setFilterSpeed(filterSpeed === 'slow' ? 'all' : 'slow')
-                }
-                className="px-3"
-              >
-                Trễ hạn
-              </Button>
-              <Button
-                variant={filterSpeed === 'ontime' ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() =>
-                  setFilterSpeed(filterSpeed === 'ontime' ? 'all' : 'ontime')
-                }
-                className="px-3"
-              >
-                Đúng hạn
-              </Button>
-            </div>
-
-            {/* View Toggle Select */}
-            <select
-              value={kanbanView ? 'kanban' : 'list'}
-              onChange={e => setKanbanView(e.target.value === 'kanban')}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white flex items-center gap-2 min-w-32"
-            >
-              <option value="kanban">Bảng Kanban</option>
-              <option value="list">Danh sách</option>
-            </select>
-          </div>
+          {/* View Toggle */}
+          <select
+            value={kanbanView ? 'kanban' : 'list'}
+            onChange={e => setKanbanView(e.target.value === 'kanban')}
+            className="px-3 h-9 border border-gray-300 rounded-lg text-sm bg-white hover:border-gray-400 transition-colors"
+          >
+            <option value="kanban">Bảng Kanban</option>
+            <option value="list">Danh sách</option>
+          </select>
         </div>
 
-        {/* Filter Panel */}
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Trạng thái
-              </label>
-              <select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="all">Tất cả trạng thái</option>
-                <option value="todo">Chưa làm</option>
-                <option value="in_progress">Đang làm</option>
-                <option value="review">Kiểm tra</option>
-                <option value="done">Xong</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mức độ ưu tiên
-              </label>
-              <select
-                value={filterPriority}
-                onChange={e => setFilterPriority(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="all">Tất cả mức độ</option>
-                <option value="urgent">Khẩn cấp</option>
-                <option value="high">Ưu tiên cao</option>
-                <option value="medium">Bình thường</option>
-                <option value="low">Thấp</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Khu vực làm việc
-              </label>
-              <select
-                value={filterZone}
-                onChange={e => setFilterZone(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="all">Tất cả khu vực</option>
-                {zones.map(zone => (
-                  <option key={zone.id} value={zone.id}>
-                    {zone.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Người thực hiện
-              </label>
-              <select
-                value={filterWorker}
-                onChange={e => setFilterWorker(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="all">Tất cả nhân viên</option>
-                {workers.map(worker => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
       </Card>
 
       {/* Task Board */}
@@ -1585,25 +1480,6 @@ const TaskCard = ({
 
   const priorityConfig = getPriorityConfig(task.priority);
 
-  const updateSubtaskQuantity = (
-    subtaskIndex: number,
-    completedQty: number,
-  ) => {
-    const subtask = task.subtasks[subtaskIndex];
-    const totalQty = subtask.qty_total || 0;
-    const percent =
-      totalQty > 0 ? Math.round((completedQty / totalQty) * 100) : 0;
-
-    const updatedSubtasks = task.subtasks.map((st, idx) =>
-      idx === subtaskIndex
-        ? { ...st, completionPercent: Math.min(percent, 100) }
-        : st,
-    );
-
-    const updatedTask = { ...task, subtasks: updatedSubtasks };
-    onTaskEdit(updatedTask);
-  };
-
   const updateSubStage = (newStage: string) => {
     const updatedTask = { ...task, subStage: newStage };
     if (onTaskChange) {
@@ -1738,56 +1614,43 @@ const TaskCard = ({
           </div>
         )}
 
-        {/* Progress with circular indicator */}
-        <div className="mb-3">
-          <div className="flex items-center gap-3">
-            <div className="relative w-12 h-12">
-              <svg className="w-12 h-12 transform -rotate-90">
-                <circle
-                  cx="24"
-                  cy="24"
-                  r="20"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                  className="text-gray-200"
-                />
-                <circle
-                  cx="24"
-                  cy="24"
-                  r="20"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 20}`}
-                  strokeDashoffset={`${
-                    2 * Math.PI * 20 * (1 - realProgress / 100)
-                  }`}
-                  className={cn(
-                    'transition-all duration-300',
-                    realProgress > 75
-                      ? 'text-green-500'
-                      : realProgress > 50
-                      ? 'text-blue-500'
-                      : realProgress > 25
-                      ? 'text-yellow-500'
-                      : 'text-orange-500',
-                  )}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-xs font-semibold">{realProgress}%</span>
-              </div>
+        {/* Progress - Simplified */}
+        <div className="mb-3 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="text-lg font-bold text-gray-900">{completedQty}</span>
+              <span className="text-gray-500">/</span>
+              <span className="text-sm text-gray-600">{totalQty}</span>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">
-                {completedAssemblies}/{totalAssemblies} cấu kiện
-              </p>
-              <p className="text-xs text-gray-600">
-                {completedQty}/{totalQty} chi tiết
-              </p>
+            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  'h-full transition-all duration-300 rounded-full',
+                  realProgress === 100
+                    ? 'bg-green-500'
+                    : realProgress >= 75
+                    ? 'bg-blue-500'
+                    : realProgress >= 50
+                    ? 'bg-yellow-500'
+                    : 'bg-orange-500',
+                )}
+                style={{ width: `${realProgress}%` }}
+              />
             </div>
+          </div>
+          <div className="text-right ml-3">
+            <span className={cn(
+              'text-sm font-semibold',
+              realProgress === 100
+                ? 'text-green-600'
+                : realProgress >= 75
+                ? 'text-blue-600'
+                : realProgress >= 50
+                ? 'text-yellow-600'
+                : 'text-orange-600',
+            )}>
+              {realProgress}%
+            </span>
           </div>
         </div>
 
@@ -1801,30 +1664,26 @@ const TaskCard = ({
           </div>
         )}
 
-        {/* Sub-items Management */}
+        {/* Sub-items - Clean Cards */}
         {task.subtasks.length > 0 && (
           <div className="border-t pt-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-gray-700">
-                Chi tiết sản phẩm ({task.subtasks.length})
+            <button
+              onClick={() => setShowSubtasks(!showSubtasks)}
+              className="w-full flex items-center justify-between mb-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
+            >
+              <span className="text-xs font-semibold text-gray-700">
+                Chi tiết ({task.subtasks.length})
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSubtasks(!showSubtasks)}
-                className="h-6 w-6 p-0"
-              >
-                <ChevronDown
-                  className={cn(
-                    'h-3 w-3 transition-transform',
-                    showSubtasks && 'rotate-180',
-                  )}
-                />
-              </Button>
-            </div>
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 transition-transform text-gray-500',
+                  showSubtasks && 'rotate-180',
+                )}
+              />
+            </button>
 
             {showSubtasks && (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-64 overflow-y-auto">
                 {task.subtasks.map((subtask, idx) => {
                   const totalQty = subtask.qty_total || 0;
                   const percent = subtask.completionPercent || 0;
@@ -1833,85 +1692,35 @@ const TaskCard = ({
                   return (
                     <div
                       key={idx}
-                      className="p-2 bg-gray-50 rounded border border-gray-200"
+                      className="bg-white border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition-all"
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <p className="text-xs font-medium text-gray-900">
-                            {subtask.part_name || `Chi tiết ${idx + 1}`}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            Tiết diện: {task.profile} | SL: {totalQty}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="relative w-10 h-10">
-                            <svg className="w-10 h-10 transform -rotate-90">
-                              <circle
-                                cx="20"
-                                cy="20"
-                                r="16"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                fill="none"
-                                className="text-gray-200"
-                              />
-                              <circle
-                                cx="20"
-                                cy="20"
-                                r="16"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                fill="none"
-                                strokeDasharray={`${2 * Math.PI * 16}`}
-                                strokeDashoffset={`${
-                                  2 * Math.PI * 16 * (1 - percent / 100)
-                                }`}
-                                className={cn(
-                                  'transition-all',
-                                  percent === 100
-                                    ? 'text-green-500'
-                                    : percent >= 75
-                                    ? 'text-blue-500'
-                                    : percent >= 50
-                                    ? 'text-yellow-500'
-                                    : percent >= 25
-                                    ? 'text-orange-500'
-                                    : 'text-gray-400',
-                                )}
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="text-[10px] font-semibold">
-                                {percent}%
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs font-medium text-gray-900">
-                              {completedQty}/{totalQty}
-                            </p>
-                          </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium text-gray-900 flex-1">
+                          {subtask.part_name || `Part ${idx + 1}`}
+                        </p>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-sm font-bold text-gray-900">
+                            {completedQty}
+                          </span>
+                          <span className="text-xs text-gray-500">/</span>
+                          <span className="text-xs text-gray-600">{totalQty}</span>
                         </div>
                       </div>
 
-                      {/* Quick quantity input */}
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max={totalQty}
-                          value={completedQty}
-                          onChange={e => {
-                            const val = Math.min(
-                              Math.max(0, parseInt(e.target.value) || 0),
-                              totalQty,
-                            );
-                            updateSubtaskQuantity(idx, val);
-                          }}
-                          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md"
-                          placeholder="Số lượng hoàn thành"
+                      {/* Progress bar */}
+                      <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            'h-full transition-all rounded-full',
+                            percent === 100
+                              ? 'bg-green-500'
+                              : percent >= 75
+                              ? 'bg-blue-500'
+                              : percent >= 50
+                              ? 'bg-yellow-500'
+                              : 'bg-orange-500',
+                          )}
+                          style={{ width: `${percent}%` }}
                         />
                       </div>
                     </div>
@@ -1922,53 +1731,48 @@ const TaskCard = ({
           </div>
         )}
 
-        {/* Stage Buttons - Bottom Left */}
+        {/* Stage Progress - Simplified */}
         <div className="pt-3 border-t">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-700">Giai đoạn</span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={e => {
-                  e.stopPropagation();
-                  onComment?.(task.id);
-                }}
-                className="h-6 w-6 p-0"
-              >
-                <MessageSquare className="h-3 w-3" />
-              </Button>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                <MoreHorizontal className="h-3 w-3" />
-              </Button>
-            </div>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-gray-700">Giai đoạn</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={e => {
+                e.stopPropagation();
+                onComment?.(task.id);
+              }}
+              className="h-7 px-2 text-xs"
+            >
+              <MessageSquare className="h-3 w-3 mr-1" />
+              Ghi chú
+            </Button>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Current Stage */}
-            <button
-              className="flex-1 px-3 py-2 text-xs font-medium bg-primary text-white rounded-md border-2 border-primary cursor-default"
-              onClick={e => e.stopPropagation()}
-              disabled
-            >
-              {currentSubStage}
-            </button>
+          {/* Stage Flow */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              {/* Current Stage - Highlighted */}
+              <div className="flex-1 px-3 py-2 text-xs font-medium bg-primary/10 text-primary rounded-lg border border-primary/30">
+                {currentSubStage}
+              </div>
 
-            {/* Next Stage Button */}
-            {nextStage && (
-              <>
-                <ChevronRight className="h-4 w-4 text-gray-400" />
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    updateSubStage(nextStage);
-                  }}
-                  className="flex-1 px-3 py-2 text-xs font-medium bg-white text-gray-700 rounded-md border-2 border-gray-300 hover:border-primary hover:bg-primary/5 transition-all"
-                >
-                  {nextStage}
-                </button>
-              </>
-            )}
+              {/* Next Stage */}
+              {nextStage && (
+                <>
+                  <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      updateSubStage(nextStage);
+                    }}
+                    className="flex-1 px-3 py-2 text-xs font-medium bg-white text-gray-700 rounded-lg border border-gray-300 hover:border-primary hover:bg-primary/5 hover:text-primary transition-all"
+                  >
+                    {nextStage}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </Card>
