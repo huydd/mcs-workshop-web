@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useMemo, useEffect, DragEvent } from 'react';
-import { ChevronDown, ChevronRight, Package, AlertCircle, GripVertical, CheckCircle2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Package,
+  AlertCircle,
+  GripVertical,
+  CheckCircle2,
+} from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -76,8 +83,12 @@ const PullBoardPage = () => {
   const [availableTasks, setAvailableTasks] = useState<AvailableTask[]>([]);
   const [workshopTasks, setWorkshopTasks] = useState<WorkshopTask[]>([]);
   const [claimedTasks, setClaimedTasks] = useState<ClaimedTask[]>([]);
-  const [expandedAvailable, setExpandedAvailable] = useState<Set<string>>(new Set());
-  const [expandedWorkshop, setExpandedWorkshop] = useState<Set<string>>(new Set());
+  const [expandedAvailable, setExpandedAvailable] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedWorkshop, setExpandedWorkshop] = useState<Set<string>>(
+    new Set(),
+  );
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
@@ -149,17 +160,67 @@ const PullBoardPage = () => {
         return;
       }
 
-      // Convert BOM parent nodes directly to tasks (NO GROUPING)
-      const tasks: AvailableTask[] = bomData.data.map((parent, idx) => ({
-        id: `task-${parent.index || idx}`,
-        index: parent.index || idx + 1,
-        ass_name: parent.ass_name,
-        profile: parent.profile,
-        material: parent.material,
-        qty_total: parent.qty_total || 0,
-        weight_total: parent.weight_total || 0,
-        children: parent.children || [],
-      }));
+      // Group BOM data by (ass_name + profile) to create tasks
+      // Each group = 1 task
+      // Each parent node in group = 1 assembly
+      // Children of parent = parts of that assembly
+
+      type GroupKey = string;
+      const grouped = new Map<GroupKey, {
+        ass_name: string | null;
+        profile: string | null;
+        material: string | null;
+        assemblies: BomTreeNode[]; // Parent nodes (assemblies)
+        totalQty: number;
+        totalWeight: number;
+      }>();
+
+      bomData.data.forEach(parent => {
+        const key = `${parent.ass_name || 'UNKNOWN'}::${parent.profile || 'UNKNOWN'}`;
+
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.assemblies.push(parent);
+          existing.totalQty += parent.qty_total || 0;
+          existing.totalWeight += parent.weight_total || 0;
+        } else {
+          grouped.set(key, {
+            ass_name: parent.ass_name,
+            profile: parent.profile,
+            material: parent.material,
+            assemblies: [parent],
+            totalQty: parent.qty_total || 0,
+            totalWeight: parent.weight_total || 0,
+          });
+        }
+      });
+
+      // Convert groups to tasks
+      // Each group's assemblies array contains the parent nodes (assemblies)
+      // Each parent's children array contains the parts
+      const tasks: AvailableTask[] = Array.from(grouped.entries()).map(([_, group], idx) => {
+        // Flatten all children from all assemblies for backward compatibility
+        const allChildren: BomTreeNode[] = [];
+        group.assemblies.forEach(assembly => {
+          assembly.children.forEach(child => {
+            allChildren.push({
+              ...child,
+              assembly_id: assembly.assembly_id, // Tag each part with its assembly ID
+            });
+          });
+        });
+
+        return {
+          id: `task-${idx + 1}`,
+          index: idx + 1,
+          ass_name: group.ass_name,
+          profile: group.profile,
+          material: group.material,
+          qty_total: group.totalQty,
+          weight_total: group.totalWeight,
+          children: allChildren, // All parts from all assemblies
+        };
+      });
 
       setAvailableTasks(tasks);
     } catch (error) {
@@ -188,14 +249,18 @@ const PullBoardPage = () => {
     if (!isWorkshopLead || typeof window === 'undefined') return;
 
     try {
-      localStorage.setItem(`${STORAGE_KEY_DRAFT}_${workshopId}`, JSON.stringify(workshopTasks));
+      localStorage.setItem(
+        `${STORAGE_KEY_DRAFT}_${workshopId}`,
+        JSON.stringify(workshopTasks),
+      );
     } catch (error) {
       console.error('Error saving workshop tasks:', error);
     }
   }, [workshopTasks, isWorkshopLead, workshopId]);
 
   const toggleExpand = (id: string, type: 'available' | 'workshop') => {
-    const setter = type === 'available' ? setExpandedAvailable : setExpandedWorkshop;
+    const setter =
+      type === 'available' ? setExpandedAvailable : setExpandedWorkshop;
     setter(prev => {
       const newSet = new Set(prev);
       if (newSet.has(id)) {
@@ -270,7 +335,7 @@ const PullBoardPage = () => {
       .map(c => c.taskId);
 
     const availableToAccept = availableTasks.filter(
-      t => !confirmedClaimedIds.includes(t.id)
+      t => !confirmedClaimedIds.includes(t.id),
     );
 
     if (availableToAccept.length === 0) {
@@ -279,7 +344,7 @@ const PullBoardPage = () => {
     }
 
     const confirmed = confirm(
-      `Xác nhận nhận tất cả ${availableToAccept.length} công việc cho ${workshopName}?`
+      `Xác nhận nhận tất cả ${availableToAccept.length} công việc cho ${workshopName}?`,
     );
 
     if (!confirmed) return;
@@ -305,7 +370,7 @@ const PullBoardPage = () => {
     }
 
     const confirmed = confirm(
-      `Xác nhận nhận ${workshopTasks.length} công việc cho ${workshopName}?`
+      `Xác nhận nhận ${workshopTasks.length} công việc cho ${workshopName}?`,
     );
 
     if (confirmed) {
@@ -325,7 +390,10 @@ const PullBoardPage = () => {
       }));
 
       // Merge with existing claims, removing duplicates
-      const allClaims = [...claimedTasks.filter(c => !tasks.some(t => t.id === c.taskId)), ...newClaims];
+      const allClaims = [
+        ...claimedTasks.filter(c => !tasks.some(t => t.id === c.taskId)),
+        ...newClaims,
+      ];
       localStorage.setItem(STORAGE_KEY_CLAIMED, JSON.stringify(allClaims));
       setClaimedTasks(allClaims);
 
@@ -341,18 +409,21 @@ const PullBoardPage = () => {
       // Convert to Kanban format
       const kanbanTasks = tasks.map(task => ({
         id: task.id,
-        profile: task.ass_name || task.profile || 'Không có tên',
+        profile: task.profile || 'Không có tên', // Use profile, not ass_name
         material: task.material,
         subtasks: task.children.map((child, idx) => ({
           index: idx,
           part_name: child.part_name,
-          ass_name: child.ass_name,
+          ass_name: child.ass_name || task.ass_name, // Use child's ass_name or fallback to task's
+          assembly_id: child.assembly_id, // Assembly ID to group parts
           qty_total: child.qty_total,
+          qty_per_ass: child.qty_per_ass, // Quantity per assembly
           weight_total: child.weight_total,
           area_total: child.area_total,
           welding_machine: child.welding_machine,
           hand_welding: child.hand_welding,
           note: child.note,
+          completedQty: 0, // Initialize completed quantity
         })),
         totalQty: task.qty_total,
         totalWeight: task.weight_total,
@@ -363,10 +434,26 @@ const PullBoardPage = () => {
         assignedZone: undefined,
         workInstructions: `Nhận từ Pull Board - ${workshopName}`,
         checklist: [
-          { id: `${task.id}-check-1`, title: 'Chuẩn bị nguyên vật liệu', completed: false },
-          { id: `${task.id}-check-2`, title: 'Kiểm tra thiết bị', completed: false },
-          { id: `${task.id}-check-3`, title: 'Thực hiện gia công', completed: false },
-          { id: `${task.id}-check-4`, title: 'Kiểm tra chất lượng', completed: false },
+          {
+            id: `${task.id}-check-1`,
+            title: 'Chuẩn bị nguyên vật liệu',
+            completed: false,
+          },
+          {
+            id: `${task.id}-check-2`,
+            title: 'Kiểm tra thiết bị',
+            completed: false,
+          },
+          {
+            id: `${task.id}-check-3`,
+            title: 'Thực hiện gia công',
+            completed: false,
+          },
+          {
+            id: `${task.id}-check-4`,
+            title: 'Kiểm tra chất lượng',
+            completed: false,
+          },
           { id: `${task.id}-check-5`, title: 'Hoàn thiện', completed: false },
         ],
         status: 'todo',
@@ -378,7 +465,9 @@ const PullBoardPage = () => {
 
       // Merge with existing, avoiding duplicates
       const mergedTasks = [
-        ...existingTasks.filter((t: any) => !kanbanTasks.some(kt => kt.id === t.id)),
+        ...existingTasks.filter(
+          (t: any) => !kanbanTasks.some(kt => kt.id === t.id),
+        ),
         ...kanbanTasks,
       ];
 
@@ -389,14 +478,19 @@ const PullBoardPage = () => {
         lastUpdated: new Date().toISOString(),
       };
 
-      localStorage.setItem(`workshop_${workshopId}_tasks`, JSON.stringify(kanbanData));
+      localStorage.setItem(
+        `workshop_${workshopId}_tasks`,
+        JSON.stringify(kanbanData),
+      );
 
       // 3. Keep draft but mark as confirmed (don't clear)
       // setWorkshopTasks([]);
       // localStorage.removeItem(`${STORAGE_KEY_DRAFT}_${workshopId}`);
       // Instead, tasks will show as "Đã nhận" with green badges
 
-      alert(`Đã nhận ${tasks.length} công việc thành công!\n\nCông việc đã được đẩy vào Kanban Board (cột CHƯA LÀM).`);
+      alert(
+        `Đã nhận ${tasks.length} công việc thành công!\n\nCông việc đã được đẩy vào Kanban Board (cột CHƯA LÀM).`,
+      );
     } catch (error) {
       console.error('Error confirming tasks:', error);
       alert('Có lỗi xảy ra khi nhận việc!');
@@ -404,35 +498,49 @@ const PullBoardPage = () => {
   };
 
   const renderTask = (task: AvailableTask, type: 'available' | 'workshop') => {
-    const expanded = type === 'available'
-      ? expandedAvailable.has(task.id)
-      : expandedWorkshop.has(task.id);
+    console.log('🚀 ~ renderTask ~ task:', task);
+    const expanded =
+      type === 'available'
+        ? expandedAvailable.has(task.id)
+        : expandedWorkshop.has(task.id);
 
     const hasChildren = task.children && task.children.length > 0;
 
     // Check if task is claimed
     const claim = claimedTasks.find(c => c.taskId === task.id);
-    const isClaimedByMe = claim && claim.workshopId === workshopId && claim.confirmed;
-    const isClaimedByOther = claim && claim.workshopId !== workshopId && claim.confirmed;
+    const isClaimedByMe =
+      claim && claim.workshopId === workshopId && claim.confirmed;
+    const isClaimedByOther =
+      claim && claim.workshopId !== workshopId && claim.confirmed;
     const isDraft = workshopTasks.some(t => t.id === task.id);
     const isDragging = draggedTaskId === task.id;
 
     // Disable if claimed by anyone (confirmed)
-    const isDisabled = type === 'available' && (isClaimedByOther || (claim && claim.confirmed));
+    const isDisabled =
+      type === 'available' && (isClaimedByOther || (claim && claim.confirmed));
 
     return (
       <div
         key={task.id}
         className={cn(
           'border rounded-lg transition-all',
-          type === 'available' && isDisabled && 'opacity-40 cursor-not-allowed bg-gray-100',
-          type === 'available' && isClaimedByMe && 'border-emerald-400 bg-emerald-50',
-          type === 'available' && !isDisabled && !isClaimedByMe && 'cursor-move hover:border-primary hover:bg-primary/5',
+          type === 'available' &&
+            isDisabled &&
+            'opacity-40 cursor-not-allowed bg-gray-100',
+          type === 'available' &&
+            isClaimedByMe &&
+            'border-emerald-400 bg-emerald-50',
+          type === 'available' &&
+            !isDisabled &&
+            !isClaimedByMe &&
+            'cursor-move hover:border-primary hover:bg-primary/5',
           type === 'workshop' && 'bg-emerald-50 border-emerald-200',
           isDragging && 'opacity-50',
         )}
         draggable={type === 'available' && !isDisabled && isWorkshopLead}
-        onDragStart={(e) => type === 'available' && !isDisabled && handleDragStart(e, task.id)}
+        onDragStart={e =>
+          type === 'available' && !isDisabled && handleDragStart(e, task.id)
+        }
       >
         <div className="p-3">
           <div className="flex items-start justify-between gap-2">
@@ -445,7 +553,9 @@ const PullBoardPage = () => {
               )}
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className="bg-blue-100 text-blue-700 text-xs">#{task.index}</Badge>
+                  <Badge className="bg-blue-100 text-blue-700 text-xs">
+                    #{task.index}
+                  </Badge>
                   <span className="font-medium text-sm text-secondary">
                     {task.ass_name || 'Không có tên cấu kiện'}
                   </span>
@@ -526,9 +636,7 @@ const PullBoardPage = () => {
           <h2 className="text-xl font-semibold text-secondary mb-2">
             Vui lòng đăng nhập
           </h2>
-          <p className="text-secondary/70">
-            Đăng nhập để sử dụng Pull Board.
-          </p>
+          <p className="text-secondary/70">Đăng nhập để sử dụng Pull Board.</p>
         </Card>
       </div>
     );
@@ -549,20 +657,30 @@ const PullBoardPage = () => {
     );
   }
 
-  const confirmedClaimedIds = claimedTasks.filter(c => c.confirmed).map(c => c.taskId);
-  const myClaimedIds = claimedTasks.filter(c => c.workshopId === workshopId && c.confirmed).map(c => c.taskId);
-  const unassignedCount = availableTasks.filter(t => !confirmedClaimedIds.includes(t.id)).length;
+  const confirmedClaimedIds = claimedTasks
+    .filter(c => c.confirmed)
+    .map(c => c.taskId);
+  const myClaimedIds = claimedTasks
+    .filter(c => c.workshopId === workshopId && c.confirmed)
+    .map(c => c.taskId);
+  const unassignedCount = availableTasks.filter(
+    t => !confirmedClaimedIds.includes(t.id),
+  ).length;
 
   // Count only unconfirmed tasks in draft
   const draftCount = workshopTasks.filter(task => {
-    const claim = claimedTasks.find(c => c.taskId === task.id && c.workshopId === workshopId);
+    const claim = claimedTasks.find(
+      c => c.taskId === task.id && c.workshopId === workshopId,
+    );
     return !claim || !claim.confirmed;
   }).length;
 
   return (
     <div className="space-y-6 pb-20">
       <div>
-        <h1 className="text-2xl font-bold text-secondary">Pull Board - {workshopName}</h1>
+        <h1 className="text-2xl font-bold text-secondary">
+          Pull Board - {workshopName}
+        </h1>
         <p className="text-sm text-secondary/70 mt-1">
           Kéo việc từ danh sách khả dụng sang danh sách công việc của xưởng
         </p>
@@ -571,20 +689,36 @@ const PullBoardPage = () => {
       {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card padding="md" className="bg-blue-50 border-blue-200">
-          <div className="text-xs text-blue-700 uppercase tracking-wide">Tổng số việc</div>
-          <div className="text-2xl font-bold text-blue-900 mt-1">{availableTasks.length}</div>
+          <div className="text-xs text-blue-700 uppercase tracking-wide">
+            Tổng số việc
+          </div>
+          <div className="text-2xl font-bold text-blue-900 mt-1">
+            {availableTasks.length}
+          </div>
         </Card>
         <Card padding="md" className="bg-emerald-50 border-emerald-200">
-          <div className="text-xs text-emerald-700 uppercase tracking-wide">Đã nhận</div>
-          <div className="text-2xl font-bold text-emerald-900 mt-1">{myClaimedIds.length}</div>
+          <div className="text-xs text-emerald-700 uppercase tracking-wide">
+            Đã nhận
+          </div>
+          <div className="text-2xl font-bold text-emerald-900 mt-1">
+            {myClaimedIds.length}
+          </div>
         </Card>
         <Card padding="md" className="bg-amber-50 border-amber-200">
-          <div className="text-xs text-amber-700 uppercase tracking-wide">Đang chọn</div>
-          <div className="text-2xl font-bold text-amber-900 mt-1">{draftCount}</div>
+          <div className="text-xs text-amber-700 uppercase tracking-wide">
+            Đang chọn
+          </div>
+          <div className="text-2xl font-bold text-amber-900 mt-1">
+            {draftCount}
+          </div>
         </Card>
         <Card padding="md" className="bg-gray-50 border-gray-200">
-          <div className="text-xs text-gray-700 uppercase tracking-wide">Còn lại</div>
-          <div className="text-2xl font-bold text-gray-900 mt-1">{unassignedCount}</div>
+          <div className="text-xs text-gray-700 uppercase tracking-wide">
+            Còn lại
+          </div>
+          <div className="text-2xl font-bold text-gray-900 mt-1">
+            {unassignedCount}
+          </div>
         </Card>
       </div>
 
@@ -617,7 +751,9 @@ const PullBoardPage = () => {
               <div className="text-center py-12 text-secondary/50">
                 <Package className="h-12 w-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Chưa có công việc khả dụng</p>
-                <p className="text-xs mt-1">BOM cần được publish từ trang Technical</p>
+                <p className="text-xs mt-1">
+                  BOM cần được publish từ trang Technical
+                </p>
               </div>
             ) : (
               <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
@@ -635,7 +771,7 @@ const PullBoardPage = () => {
               'border-2 border-dashed transition-all',
               isDraggingOver
                 ? 'border-emerald-500 bg-emerald-100 shadow-lg ring-4 ring-emerald-200'
-                : 'border-emerald-300 bg-emerald-50/30'
+                : 'border-emerald-300 bg-emerald-50/30',
             )}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -671,7 +807,9 @@ const PullBoardPage = () => {
       {(() => {
         // Only show button if there are unconfirmed tasks in draft
         const unconfirmedTasks = workshopTasks.filter(task => {
-          const claim = claimedTasks.find(c => c.taskId === task.id && c.workshopId === workshopId);
+          const claim = claimedTasks.find(
+            c => c.taskId === task.id && c.workshopId === workshopId,
+          );
           return !claim || !claim.confirmed;
         });
 
