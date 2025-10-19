@@ -18,9 +18,6 @@ import {
   CheckCircle2,
   List,
   LayoutGrid,
-  ArrowUp,
-  ArrowRight,
-  ArrowDown,
   ChevronRight,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
@@ -674,9 +671,26 @@ const WorkshopPage = () => {
     taskId: string,
     newStatus: WorkshopTask['status'],
   ) => {
+    // Get the first stage of the new status
+    const getFirstStageByStatus = (status: WorkshopTask['status']): string => {
+      const stageMap = {
+        todo: 'TODO',
+        in_progress: 'Gá tổ hợp',
+        review: 'Đang nhiệm thu',
+        done: 'Đã nhập kho',
+      };
+      return stageMap[status] || '';
+    };
+
     setTasks(prevTasks => {
       const newTasks = prevTasks.map(task =>
-        task.id === taskId ? { ...task, status: newStatus } : task,
+        task.id === taskId
+          ? {
+              ...task,
+              status: newStatus,
+              subStage: getFirstStageByStatus(newStatus),
+            }
+          : task,
       );
       saveWorkshopData(newTasks);
       return newTasks;
@@ -1227,10 +1241,59 @@ const KanbanBoard = ({
     setDraggedTask(null);
     setDragOverColumn(null);
   };
+
+  // Check if task can be dropped into a column
+  const canDropIntoColumn = (
+    task: WorkshopTask,
+    targetColumnId: string,
+  ): boolean => {
+    const columnOrder = ['todo', 'in_progress', 'review', 'done'];
+    const currentIndex = columnOrder.indexOf(task.status);
+    const targetIndex = columnOrder.indexOf(targetColumnId);
+
+    // Can always move to the left (backwards)
+    if (targetIndex < currentIndex) {
+      return true;
+    }
+
+    // Can't move to the same column
+    if (targetIndex === currentIndex) {
+      return false;
+    }
+
+    // Can only move forward one column at a time
+    if (targetIndex > currentIndex + 1) {
+      return false;
+    }
+
+    // Check if task has completed the last stage of current column
+    const getStagesByStatus = (status: WorkshopTask['status']): string[] => {
+      const stageMap = {
+        todo: ['TODO', 'Đang kế hoạch', 'Đã kế hoạch'],
+        in_progress: ['Gá tổ hợp', 'Gá hoàn thiện', 'Hàn Hoàn thiện'],
+        review: ['Đang nhiệm thu', 'Pass kiểm tra'],
+        done: ['Đã nhập kho', 'Đã xuất kho'],
+      };
+      return stageMap[status] || [];
+    };
+
+    const currentStages = getStagesByStatus(task.status);
+    const lastStage = currentStages[currentStages.length - 1];
+    const currentSubStage = task.subStage || currentStages[0];
+
+    // Must be at the last stage to move forward
+    return currentSubStage === lastStage;
+  };
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
       {columns.map(column => {
         const columnTasks = tasks.filter(task => task.status === column.id);
+        const draggedTaskData = draggedTask
+          ? tasks.find(t => t.id === draggedTask)
+          : null;
+        const canDrop = draggedTaskData
+          ? canDropIntoColumn(draggedTaskData, column.id)
+          : false;
 
         return (
           <div key={column.id} className="space-y-3">
@@ -1254,8 +1317,12 @@ const KanbanBoard = ({
               className={cn(
                 'min-h-[500px] border-2 transition-all duration-200',
                 column.color,
-                dragOverColumn === column.id
+                draggedTask && canDrop && dragOverColumn === column.id
                   ? 'border-primary border-dashed bg-primary/5 shadow-lg'
+                  : draggedTask && !canDrop && dragOverColumn === column.id
+                  ? 'border-red-400 border-dashed bg-red-50/30'
+                  : draggedTask && canDrop
+                  ? 'border-green-300 border-dashed'
                   : 'border-dashed',
               )}
               padding="sm"
@@ -1265,7 +1332,7 @@ const KanbanBoard = ({
                 onDrop={e => {
                   e.preventDefault();
                   setDragOverColumn(null);
-                  if (draggedTask) {
+                  if (draggedTask && canDrop) {
                     onMoveTask(
                       draggedTask,
                       column.id as WorkshopTask['status'],
@@ -1488,45 +1555,29 @@ const TaskCard = ({
   const getPriorityConfig = (priority: WorkshopTask['priority']) => {
     const configs = {
       urgent: {
-        label: 'Critical',
-        color: 'bg-red-500 text-white border-red-600',
+        label: 'Khẩn cấp',
+        color: 'text-red-500 border-red-300 bg-red-50',
         icon: (
-          <div className="flex flex-col -space-y-1">
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M7 14l5-5 5 5H7z" />
-            </svg>
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M7 14l5-5 5 5H7z" />
-            </svg>
+          <div className="flex flex-col -space-y-1.5">
+            <ChevronDown className="w-3 h-3 rotate-180" />
+            <ChevronDown className="w-3 h-3 rotate-180" />
           </div>
         ),
       },
       high: {
-        label: 'High',
-        color: 'bg-orange-500 text-white border-orange-600',
-        icon: (
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M7 14l5-5 5 5H7z" />
-          </svg>
-        ),
+        label: 'Cao',
+        color: 'text-orange-500 border-orange-300 bg-orange-50',
+        icon: <ChevronDown className="w-3 h-3 rotate-180" />,
       },
       medium: {
-        label: 'Medium',
-        color: 'bg-blue-500 text-white border-blue-600',
-        icon: (
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M7 10h10v4H7z" />
-          </svg>
-        ),
+        label: 'Trung bình',
+        color: 'text-blue-500 border-blue-300 bg-blue-50',
+        icon: <ChevronDown className="w-3 h-3 rotate-90" />,
       },
       low: {
-        label: 'Low',
-        color: 'bg-gray-500 text-white border-gray-600',
-        icon: (
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M7 10l5 5 5-5H7z" />
-          </svg>
-        ),
+        label: 'Thấp',
+        color: 'text-gray-500 border-gray-300 bg-gray-50',
+        icon: <ChevronDown className="w-3 h-3" />,
       },
     };
     return configs[priority];
