@@ -29,16 +29,20 @@ import { cn } from '@/lib/utils';
 
 interface BomTreeNode {
   index: number | null;
+  project_id: string | null;
+  assembly_id: string | null;
   ass_name: string | null;
   part_name: string | null;
   profile: string | null;
   material: string | null;
-  thickness: number | number[] | null;
-  width: number | null;
+  thickness: number | number[] | string | null;
+  width: number | string | null;  // Can be number (90) or string like "(Kg/m)"
   length: number | null;
   qty_per_ass: number | null;
   qty_total: number | null;
   weight_per_part: number | null;
+  weight_combination: number | null;
+  weight_per_ass: number | null;
   weight_total: number | null;
   area_per_ass: number | null;
   area_total: number | null;
@@ -48,33 +52,6 @@ interface BomTreeNode {
   children: BomTreeNode[];
 }
 
-interface Workshop {
-  id: string;
-  code: string;
-  name: string;
-  color: string;
-}
-
-interface TaskItem {
-  id: string;
-  profile: string;
-  material: string | null;
-  subtasks: {
-    index: number;
-    part_name: string | null;
-    ass_name: string | null;
-    qty_total: number | null;
-    weight_total: number | null;
-    area_total: number | null;
-    welding_machine: number | null;
-    hand_welding: number | null;
-    note: string | null;
-  }[];
-  assignedWorkshops: string[];
-  totalQty: number;
-  totalWeight: number;
-  totalArea: number;
-}
 
 const CSV_HEADERS = [
   'component_code',
@@ -103,6 +80,8 @@ const CSV_HEADERS = [
 
 const RAW_HEADER_KEYS = [
   'index',
+  'project_id',
+  'assembly_id',
   'ass_name',
   'part_name',
   'profile',
@@ -113,6 +92,8 @@ const RAW_HEADER_KEYS = [
   'qty_per_ass',
   'qty_total',
   'weight_per_part',
+  'weight_combination',
+  'weight_per_ass',
   'weight_total',
   'area_per_ass',
   'area_total',
@@ -126,23 +107,27 @@ type RawHeaderKey = (typeof RAW_HEADER_KEYS)[number];
 type HeaderLookup = (row: any[], key: RawHeaderKey) => any;
 
 const fallbackColumnIndex: Record<RawHeaderKey, number> = {
-  index: 0,
-  ass_name: 1,
-  part_name: 2,
-  profile: 3,
-  material: 4,
-  thickness: 5,
-  width: 6,
-  length: 7,
-  qty_per_ass: 8,
-  qty_total: 9,
-  weight_per_part: 10,
-  weight_total: 12,
-  area_per_ass: 13,
-  area_total: 14,
-  welding_machine: 15,
-  hand_welding: 16,
-  note: 17,
+  index: 0,                    // NO
+  project_id: 1,               // Dự án_ID (Project_ID)
+  assembly_id: 2,              // Cấu kiện (Assembly_ID)
+  ass_name: 3,                 // Tên ck (Ass name)
+  part_name: 4,                // Tên chi tiết (Part name)
+  profile: 5,                  // Tiết diện (Profile)
+  material: 6,                 // Vật liệu (Material)
+  thickness: 7,                // Dày (Thick) (mm)
+  width: 8,                    // Rộng (Width) (mm)
+  length: 9,                   // Dài (Length) (mm)
+  qty_per_ass: 10,             // SL/1CK (Qty/Ass)
+  qty_total: 11,               // SL tổng (QtyTotal)
+  weight_per_part: 12,         // KL CT (Weight 1 Part) (kg)
+  weight_combination: 13,      // KL/1CK tổ hợp (Weight 1 combination Ass) (kg)
+  weight_per_ass: 15,          // KL/1CK (Weight 1 Ass) (kg) - NOTE: Column 15, not 14!
+  weight_total: 16,            // KL tổng (Weight Total) (kg)
+  area_per_ass: 17,            // Area 1 Ass (m2)
+  area_total: 18,              // Area Total (m2)
+  welding_machine: 19,         // welding machine (mh)
+  hand_welding: 20,            // hand welding (mh)
+  note: 21,                    // Note
 };
 
 const normalizeHeaderKey = (value: unknown): RawHeaderKey | undefined => {
@@ -156,28 +141,47 @@ const normalizeHeaderKey = (value: unknown): RawHeaderKey | undefined => {
     no: 'index',
     index: 'index',
     stt: 'index',
+    projectid: 'project_id',
+    duanid: 'project_id',
+    assemblyid: 'assembly_id',
+    caukien: 'assembly_id',
     assname: 'ass_name',
     assembly: 'ass_name',
     assemblyname: 'ass_name',
+    tenck: 'ass_name',
     partname: 'part_name',
     partcode: 'part_name',
+    tenchitiet: 'part_name',
     profile: 'profile',
+    tietdien: 'profile',
     material: 'material',
+    vatlieu: 'material',
     thick: 'thickness',
     thickness: 'thickness',
+    day: 'thickness',
     width: 'width',
+    rong: 'width',
     length: 'length',
+    dai: 'length',
     qtyass: 'qty_per_ass',
     quantityass: 'qty_per_ass',
     qtyperass: 'qty_per_ass',
+    slck: 'qty_per_ass',
     qtytotal: 'qty_total',
     quantitytotal: 'qty_total',
     totaltqty: 'qty_total',
+    sltong: 'qty_total',
     weightperpart: 'weight_per_part',
     weight1part: 'weight_per_part',
     weightpart: 'weight_per_part',
+    klct: 'weight_per_part',
+    weightcombination: 'weight_combination',
+    klcktohop: 'weight_combination',
+    weightperass: 'weight_per_ass',
+    klck: 'weight_per_ass',
     weighttotal: 'weight_total',
     weightto: 'weight_total',
+    kltong: 'weight_total',
     areaperass: 'area_per_ass',
     area1ass: 'area_per_ass',
     areatotal: 'area_total',
@@ -270,53 +274,11 @@ const TechnicalBomPage = () => {
     message: string;
   }>({ show: false, message: '' });
   const [approvalStatus, setApprovalStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [showTaskAssignment, setShowTaskAssignment] = useState(false);
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
-  const [bulkWorkshopSelection, setBulkWorkshopSelection] = useState<string>('');
-  const [showBulkAssignment, setShowBulkAssignment] = useState(false);
-  const [showAssignmentDashboard, setShowAssignmentDashboard] = useState(false);
   const [collapseBomTable, setCollapseBomTable] = useState(false);
-  const [collapseAssignedTasks, setCollapseAssignedTasks] = useState(true);
-  const [showBottomSheet, setShowBottomSheet] = useState(false);
-  const [draggedTask, setDraggedTask] = useState<string | null>(null);
-  const [workflowStep, setWorkflowStep] = useState<'assign' | 'review' | 'confirm'>('assign');
 
   const canUpload = user?.role === UserRole.TECHNICAL_ENGINEER;
   const canReview = user?.role === UserRole.PRODUCTION_PLANNER;
   const BOM_STORAGE_KEY = 'bomListData';
-
-  // Utility function to retrieve workshop tasks from localStorage
-  const getWorkshopTasks = (workshopId: string) => {
-    try {
-      const workshopData = localStorage.getItem(`workshop_${workshopId}_tasks`);
-      if (workshopData) {
-        return JSON.parse(workshopData);
-      }
-    } catch (error) {
-      console.error(`Error loading tasks for workshop ${workshopId}:`, error);
-    }
-    return { workshopId, workshopName: '', tasks: [], lastUpdated: null };
-  };
-
-  // Utility function to get all workshop task mappings
-  const getAllWorkshopTaskMappings = () => {
-    const mappings: Record<string, { workshopId: string; workshopName: string; tasks: TaskItem[]; lastUpdated: string }> = {};
-
-    workshops.forEach(workshop => {
-      mappings[workshop.id] = getWorkshopTasks(workshop.id);
-    });
-
-    return mappings;
-  };
-
-  const workshops: Workshop[] = [
-    { id: 'W1', code: 'W1', name: 'Xưởng kết cấu A', color: 'bg-blue-100 text-blue-800 border-blue-300' },
-    { id: 'W2', code: 'W2', name: 'Xưởng gia công B', color: 'bg-green-100 text-green-800 border-green-300' },
-    { id: 'W3', code: 'W3', name: 'Xưởng hàn C', color: 'bg-purple-100 text-purple-800 border-purple-300' },
-    { id: 'W4', code: 'W4', name: 'Xưởng hoàn thiện D', color: 'bg-orange-100 text-orange-800 border-orange-300' },
-    { id: 'W5', code: 'W5', name: 'Xưởng đóng gói E', color: 'bg-pink-100 text-pink-800 border-pink-300' }
-  ];
 
   // Check for existing BOM data on page load
   useEffect(() => {
@@ -339,26 +301,6 @@ const TechnicalBomPage = () => {
             // Load approval status for Mr. Gioi
             if (savedApprovalStatus) {
               setApprovalStatus(savedApprovalStatus as 'approved' | 'rejected');
-
-              // If approved, load and show existing tasks
-              if (savedApprovalStatus === 'approved') {
-                const generatedTasks = generateTasksFromBom(bomData.data);
-                setTasks(generatedTasks);
-                setShowTaskAssignment(true);
-
-                // Load any saved task assignments
-                const savedTaskAssignments = localStorage.getItem('taskAssignments');
-                if (savedTaskAssignments) {
-                  try {
-                    const taskData = JSON.parse(savedTaskAssignments);
-                    if (taskData.tasks && Array.isArray(taskData.tasks)) {
-                      setTasks(taskData.tasks);
-                    }
-                  } catch (error) {
-                    console.error('Error loading task assignments:', error);
-                  }
-                }
-              }
             }
           }
         }
@@ -388,19 +330,44 @@ const TechnicalBomPage = () => {
     return trimmed.length ? trimmed : null;
   };
 
-  const parseThickness = (value: unknown): number | number[] | null => {
+  const parseThickness = (value: unknown): number | number[] | string | null => {
     if (value === null || value === undefined || value === '') return null;
     if (typeof value === 'number') return value;
-    const parts = value
-      .toString()
+    const strValue = value.toString().trim();
+
+    // Try to parse as number(s)
+    const parts = strValue
       .split(/[^0-9.]+/)
       .map(p => p.trim())
       .filter(Boolean)
       .map(p => Number(p.replace(/,/g, '.')))
       .filter(num => Number.isFinite(num));
-    if (parts.length === 0) return null;
+
+    if (parts.length === 0) {
+      // If no numbers found, return as string (e.g., "D20", "L100*6")
+      return strValue;
+    }
     if (parts.length === 1) return parts[0];
     return parts;
+  };
+
+  const parseWidth = (value: unknown): number | string | null => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') return value;
+
+    const strValue = value.toString().trim();
+
+    // Check if it looks like a unit or special string like "(Kg/m)"
+    if (strValue.startsWith('(') || strValue.includes('/')) {
+      return strValue;
+    }
+
+    // Try to parse as number
+    const numValue = toNumber(strValue);
+    if (numValue !== null) return numValue;
+
+    // Return as string if not a number
+    return strValue;
   };
 
   const createParent = (
@@ -412,16 +379,20 @@ const TechnicalBomPage = () => {
 
     return {
       index,
+      project_id: toStringValue(lookup(row, 'project_id')),
+      assembly_id: toStringValue(lookup(row, 'assembly_id')),
       ass_name: toStringValue(lookup(row, 'ass_name')),
       part_name: toStringValue(lookup(row, 'part_name')),
       profile: toStringValue(lookup(row, 'profile')),
       material: toStringValue(lookup(row, 'material')),
       thickness: parseThickness(lookup(row, 'thickness')),
-      width: toNumber(lookup(row, 'width')),
+      width: parseWidth(lookup(row, 'width')),
       length: toNumber(lookup(row, 'length')),
       qty_per_ass: toNumber(lookup(row, 'qty_per_ass')),
       qty_total: toNumber(lookup(row, 'qty_total')),
       weight_per_part: toNumber(lookup(row, 'weight_per_part')),
+      weight_combination: toNumber(lookup(row, 'weight_combination')),
+      weight_per_ass: toNumber(lookup(row, 'weight_per_ass')),
       weight_total: toNumber(lookup(row, 'weight_total')),
       area_per_ass: toNumber(lookup(row, 'area_per_ass')),
       area_total: toNumber(lookup(row, 'area_total')),
@@ -432,26 +403,35 @@ const TechnicalBomPage = () => {
     };
   };
 
-  const createChild = (row: any[], lookup: HeaderLookup): BomTreeNode => ({
-    index: null,
-    ass_name: toStringValue(lookup(row, 'ass_name')),
-    part_name: toStringValue(lookup(row, 'part_name')),
-    profile: toStringValue(lookup(row, 'profile')),
-    material: toStringValue(lookup(row, 'material')),
-    thickness: parseThickness(lookup(row, 'thickness')),
-    width: toNumber(lookup(row, 'width')),
-    length: toNumber(lookup(row, 'length')),
-    qty_per_ass: toNumber(lookup(row, 'qty_per_ass')),
-    qty_total: toNumber(lookup(row, 'qty_total')),
-    weight_per_part: toNumber(lookup(row, 'weight_per_part')),
-    weight_total: toNumber(lookup(row, 'weight_total')),
-    area_per_ass: toNumber(lookup(row, 'area_per_ass')),
-    area_total: toNumber(lookup(row, 'area_total')),
-    welding_machine: toNumber(lookup(row, 'welding_machine')),
-    hand_welding: toNumber(lookup(row, 'hand_welding')),
-    note: toStringValue(lookup(row, 'note')),
-    children: [],
-  });
+  const createChild = (row: any[], lookup: HeaderLookup): BomTreeNode => {
+    // Child rows have the EXACT SAME column structure as parent rows
+    // The only difference is column 0 (index) is empty
+    // All other columns should map exactly the same way
+    return {
+      index: null,
+      project_id: toStringValue(lookup(row, 'project_id')),
+      assembly_id: toStringValue(lookup(row, 'assembly_id')),
+      ass_name: toStringValue(lookup(row, 'ass_name')),
+      part_name: toStringValue(lookup(row, 'part_name')),
+      profile: toStringValue(lookup(row, 'profile')),
+      material: toStringValue(lookup(row, 'material')),
+      thickness: parseThickness(lookup(row, 'thickness')),
+      width: parseWidth(lookup(row, 'width')),
+      length: toNumber(lookup(row, 'length')),
+      qty_per_ass: toNumber(lookup(row, 'qty_per_ass')),
+      qty_total: toNumber(lookup(row, 'qty_total')),
+      weight_per_part: toNumber(lookup(row, 'weight_per_part')),
+      weight_combination: toNumber(lookup(row, 'weight_combination')),
+      weight_per_ass: toNumber(lookup(row, 'weight_per_ass')),
+      weight_total: toNumber(lookup(row, 'weight_total')),
+      area_per_ass: toNumber(lookup(row, 'area_per_ass')),
+      area_total: toNumber(lookup(row, 'area_total')),
+      welding_machine: toNumber(lookup(row, 'welding_machine')),
+      hand_welding: toNumber(lookup(row, 'hand_welding')),
+      note: toStringValue(lookup(row, 'note')),
+      children: [],
+    };
+  };
 
   const processRowsIncrementally = useCallback(
     (rows: any[][], startRow: number, lookup: HeaderLookup) =>
@@ -846,29 +826,17 @@ const TechnicalBomPage = () => {
           timestamp: new Date().toISOString(),
           fileName: fileMeta?.name || 'unknown',
           totalGroups: structuredData.length,
-          totalChildren: structuredData.reduce((acc, parent) => acc + parent.children.length, 0)
+          totalChildren: structuredData.reduce((acc, parent) => acc + parent.children.length, 0),
+          published: true,
         };
 
         localStorage.setItem(BOM_STORAGE_KEY, JSON.stringify(bomData));
         setIsSaved(true);
 
-        // Role-based notification
-        if (user?.name === 'Anh Giỏi') {
-          setSaveNotification({
-            show: true,
-            message: 'BOM list details have been saved. Please review them and use the pencil button to assign tasks.'
-          });
-        } else {
-          setStatus({
-            message: 'BOM data has been saved successfully.',
-            type: 'success'
-          });
-        }
-
-        // Hide notification after 10 seconds
-        setTimeout(() => {
-          setSaveNotification({ show: false, message: '' });
-        }, 10000);
+        setStatus({
+          message: `BOM đã được lưu và publish! Xưởng trưởng có thể vào Pull Board để kéo việc.`,
+          type: 'success'
+        });
       }
     } catch (error) {
       setStatus({
@@ -927,67 +895,10 @@ const TechnicalBomPage = () => {
     });
   };
 
-  const generateTasksFromBom = (bomData: BomTreeNode[]): TaskItem[] => {
-    const profileMap = new Map<string, {
-      parents: BomTreeNode[];
-      material: string | null;
-    }>();
-
-    // Group parent items by profile
-    bomData.forEach(parent => {
-      if (parent.profile) {
-        const profile = parent.profile;
-        const material = parent.material;
-
-        if (!profileMap.has(profile)) {
-          profileMap.set(profile, { parents: [], material });
-        }
-        profileMap.get(profile)!.parents.push(parent);
-      }
-    });
-
-    // Convert to TaskItems
-    const tasks: TaskItem[] = [];
-    profileMap.forEach((data, profile) => {
-      // Each parent becomes a subtask
-      const subtasks = data.parents.map(parent => ({
-        index: parent.index || 0,
-        part_name: parent.part_name,
-        ass_name: parent.ass_name,
-        qty_total: parent.qty_total,
-        weight_total: parent.weight_total,
-        area_total: parent.area_total,
-        welding_machine: parent.welding_machine,
-        hand_welding: parent.hand_welding,
-        note: parent.note,
-      }));
-
-      const totalQty = subtasks.reduce((sum, item) => sum + (item.qty_total || 0), 0);
-      const totalWeight = subtasks.reduce((sum, item) => sum + (item.weight_total || 0), 0);
-      const totalArea = subtasks.reduce((sum, item) => sum + (item.area_total || 0), 0);
-
-      tasks.push({
-        id: `task-${profile.replace(/\s+/g, '-').toLowerCase()}`,
-        profile,
-        material: data.material,
-        subtasks,
-        assignedWorkshops: [],
-        totalQty,
-        totalWeight,
-        totalArea,
-      });
-    });
-
-    return tasks.sort((a, b) => a.profile.localeCompare(b.profile));
-  };
-
   const handleApproveBom = () => {
     setApprovalStatus('approved');
-    const generatedTasks = generateTasksFromBom(structuredData);
-    setTasks(generatedTasks);
-    setShowTaskAssignment(true);
     setStatus({
-      message: `BOM đã được phê duyệt. Tạo ${generatedTasks.length} nhiệm vụ sản xuất theo profile.`,
+      message: `BOM đã được phê duyệt. Xưởng trưởng có thể vào Pull Board để kéo việc.`,
       type: 'success',
     });
     localStorage.setItem('bomApprovalStatus', 'approved');
@@ -995,233 +906,11 @@ const TechnicalBomPage = () => {
 
   const handleRejectBom = () => {
     setApprovalStatus('rejected');
-    setShowTaskAssignment(false);
-    setTasks([]);
     setStatus({
       message: 'BOM đã bị từ chối. Cần yêu cầu kỹ thuật điều chỉnh lại.',
       type: 'error',
     });
     localStorage.setItem('bomApprovalStatus', 'rejected');
-  };
-
-  const updateWorkshopMappings = (currentTasks: TaskItem[]) => {
-    // Create workshop-to-tasks mapping
-    const workshopTaskMapping: Record<string, TaskItem[]> = {};
-
-    // Initialize empty arrays for all workshops
-    workshops.forEach(workshop => {
-      workshopTaskMapping[workshop.id] = [];
-    });
-
-    // Populate mapping with assigned tasks
-    currentTasks.forEach(task => {
-      task.assignedWorkshops.forEach(workshopId => {
-        if (workshopTaskMapping[workshopId]) {
-          workshopTaskMapping[workshopId].push(task);
-        }
-      });
-    });
-
-    // Save individual workshop mappings for easy access
-    Object.entries(workshopTaskMapping).forEach(([workshopId, workshopTasks]) => {
-      localStorage.setItem(`workshop_${workshopId}_tasks`, JSON.stringify({
-        workshopId,
-        workshopName: workshops.find(w => w.id === workshopId)?.name || '',
-        tasks: workshopTasks,
-        lastUpdated: new Date().toISOString()
-      }));
-    });
-
-    // Also update the main task assignments
-    const assignmentData = {
-      bomData: structuredData,
-      tasks: currentTasks,
-      workshopTaskMapping,
-      assignedAt: new Date().toISOString(),
-      assignedBy: user?.name || 'Production Planner'
-    };
-    localStorage.setItem('taskAssignments', JSON.stringify(assignmentData));
-
-    // Log for debugging
-    console.log('Workshop mappings auto-saved:', workshopTaskMapping);
-  };
-
-  const toggleWorkshopAssignment = (taskId: string, workshopId: string) => {
-    setTasks(prevTasks => {
-      const updatedTasks = prevTasks.map(task => {
-        if (task.id === taskId) {
-          const isAssigned = task.assignedWorkshops.includes(workshopId);
-          const newAssignedWorkshops = isAssigned
-            ? task.assignedWorkshops.filter(id => id !== workshopId)
-            : [...task.assignedWorkshops, workshopId];
-
-          return { ...task, assignedWorkshops: newAssignedWorkshops };
-        }
-        return task;
-      });
-
-      // Auto-save to localStorage when assignments change
-      updateWorkshopMappings(updatedTasks);
-      return updatedTasks;
-    });
-  };
-
-  // Helper functions for task organization
-  const unassignedTasks = useMemo(() =>
-    tasks.filter(task => task.assignedWorkshops.length === 0),
-    [tasks]
-  );
-
-  const assignedTasks = useMemo(() =>
-    tasks.filter(task => task.assignedWorkshops.length > 0),
-    [tasks]
-  );
-
-  const workshopSummary = useMemo(() => {
-    const summary = workshops.map(workshop => ({
-      ...workshop,
-      taskCount: tasks.filter(task => task.assignedWorkshops.includes(workshop.id)).length,
-      tasks: tasks.filter(task => task.assignedWorkshops.includes(workshop.id))
-    }));
-    return summary;
-  }, [tasks, workshops]);
-
-  const toggleTaskSelection = (taskId: string) => {
-    setSelectedTasks(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(taskId)) {
-        newSet.delete(taskId);
-      } else {
-        newSet.add(taskId);
-      }
-      return newSet;
-    });
-  };
-
-  const selectAllTasks = () => {
-    if (selectedTasks.size === tasks.length) {
-      setSelectedTasks(new Set());
-    } else {
-      setSelectedTasks(new Set(tasks.map(t => t.id)));
-    }
-  };
-
-  const handleBulkAssignment = () => {
-    if (!bulkWorkshopSelection || selectedTasks.size === 0) return;
-
-    const selectedCount = selectedTasks.size;
-
-    setTasks(prevTasks => {
-      const updatedTasks = prevTasks.map(task => {
-        if (selectedTasks.has(task.id)) {
-          const workshopAlreadyAssigned = task.assignedWorkshops.includes(bulkWorkshopSelection);
-          const newAssignedWorkshops = workshopAlreadyAssigned
-            ? task.assignedWorkshops
-            : [...task.assignedWorkshops, bulkWorkshopSelection];
-
-          return { ...task, assignedWorkshops: newAssignedWorkshops };
-        }
-        return task;
-      });
-
-      // Auto-save to localStorage when assignments change
-      updateWorkshopMappings(updatedTasks);
-      return updatedTasks;
-    });
-
-    // Clear selections after assignment
-    setSelectedTasks(new Set());
-    setBulkWorkshopSelection('');
-
-    const workshopName = workshops.find(w => w.id === bulkWorkshopSelection)?.name || 'xưởng';
-    setStatus({
-      message: `✅ Đã gán ${selectedCount} nhiệm vụ cho ${workshopName}`,
-      type: 'success',
-    });
-  };
-
-  const handleDrop = (e: React.DragEvent, workshopId: string | null) => {
-    e.preventDefault();
-    e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
-
-    if (!draggedTask) return;
-
-    setTasks(prevTasks => {
-      const updatedTasks = prevTasks.map(task => {
-        if (task.id === draggedTask) {
-          if (workshopId === null) {
-            // Moving to unassigned
-            return { ...task, assignedWorkshops: [] };
-          } else {
-            // Moving to a workshop - replace all assignments with this workshop
-            return { ...task, assignedWorkshops: [workshopId] };
-          }
-        }
-        return task;
-      });
-
-      // Auto-save to localStorage when assignments change
-      updateWorkshopMappings(updatedTasks);
-      return updatedTasks;
-    });
-
-    setDraggedTask(null);
-
-    const workshopName = workshopId
-      ? workshops.find(w => w.id === workshopId)?.name || 'xưởng'
-      : 'chưa phân công';
-
-    setStatus({
-      message: `Đã chuyển nhiệm vụ đến ${workshopName}`,
-      type: 'success',
-    });
-  };
-
-  const saveTaskAssignments = () => {
-    // Create workshop-to-tasks mapping
-    const workshopTaskMapping: Record<string, TaskItem[]> = {};
-
-    // Initialize empty arrays for all workshops
-    workshops.forEach(workshop => {
-      workshopTaskMapping[workshop.id] = [];
-    });
-
-    // Populate mapping with assigned tasks
-    tasks.forEach(task => {
-      task.assignedWorkshops.forEach(workshopId => {
-        if (workshopTaskMapping[workshopId]) {
-          workshopTaskMapping[workshopId].push(task);
-        }
-      });
-    });
-
-    const assignmentData = {
-      bomData: structuredData,
-      tasks,
-      workshopTaskMapping,
-      assignedAt: new Date().toISOString(),
-      assignedBy: user?.name || 'Production Planner'
-    };
-
-    localStorage.setItem('taskAssignments', JSON.stringify(assignmentData));
-
-    // Also save individual workshop mappings for easy access
-    Object.entries(workshopTaskMapping).forEach(([workshopId, workshopTasks]) => {
-      localStorage.setItem(`workshop_${workshopId}_tasks`, JSON.stringify({
-        workshopId,
-        workshopName: workshops.find(w => w.id === workshopId)?.name || '',
-        tasks: workshopTasks,
-        lastUpdated: new Date().toISOString()
-      }));
-    });
-
-    // Log workshop mappings for debugging
-    console.log('Workshop Task Mappings saved to localStorage:', workshopTaskMapping);
-
-    setStatus({
-      message: `Đã phân công ${tasks.length} nhiệm vụ sản xuất cho ${Object.keys(workshopTaskMapping).filter(id => workshopTaskMapping[id].length > 0).length} xưởng.`,
-      type: 'success',
-    });
   };
 
   return (
@@ -1639,535 +1328,10 @@ const TechnicalBomPage = () => {
         </Card>
       )}
 
-      {/* 3-Step Task Assignment Workflow */}
-      {showTaskAssignment && canReview && (
-        <Card className="space-y-4" padding="lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-semibold text-secondary">
-                Phân công nhiệm vụ sản xuất - 3 bước
-              </h2>
-              <p className="text-sm text-secondary/70 mt-1">
-                Bước 1: Chọn và gán nhanh → Bước 2: Kiểm tra và điều chỉnh → Bước 3: Xác nhận hoàn tất
-              </p>
-            </div>
-
-            {/* Step Indicator */}
-            <div className="flex items-center gap-2">
-              <div className={cn(
-                "px-3 py-1 rounded-full text-sm font-medium",
-                workflowStep === 'assign' ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-600"
-              )}>
-                1. Gán nhanh
-              </div>
-              <div className={cn(
-                "px-3 py-1 rounded-full text-sm font-medium",
-                workflowStep === 'review' ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-600"
-              )}>
-                2. Kiểm tra
-              </div>
-              <div className={cn(
-                "px-3 py-1 rounded-full text-sm font-medium",
-                workflowStep === 'confirm' ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-600"
-              )}>
-                3. Hoàn tất
-              </div>
-            </div>
-          </div>
-
-          {/* Step 1: Quick Assignment */}
-          {workflowStep === 'assign' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-secondary">
-                  Bước 1: Gán nhanh nhiệm vụ cho xưởng
-                </h3>
-                <div className="flex gap-2">
-                  {selectedTasks.size > 0 && (
-                    <>
-                      <Badge className="bg-primary text-white px-3 py-1">
-                        {selectedTasks.size} đã chọn
-                      </Badge>
-                      <span className="text-sm font-medium">Gán cho:</span>
-                      {workshops.map(workshop => (
-                        <Button
-                          key={workshop.id}
-                          size="sm"
-                          onClick={() => {
-                            setBulkWorkshopSelection(workshop.id);
-                            handleBulkAssignment();
-                          }}
-                          className={cn('px-3 py-1 text-sm font-semibold', workshop.color)}
-                        >
-                          {workshop.code}
-                        </Button>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Unassigned Tasks Grid */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-md font-medium text-orange-600">
-                    Chưa phân công ({unassignedTasks.length} nhiệm vụ)
-                  </h4>
-                  {unassignedTasks.length > 0 && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        const allUnassignedIds = unassignedTasks.map(t => t.id);
-                        if (selectedTasks.size === allUnassignedIds.length) {
-                          setSelectedTasks(new Set());
-                        } else {
-                          setSelectedTasks(new Set(allUnassignedIds));
-                        }
-                      }}
-                    >
-                      {selectedTasks.size === unassignedTasks.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
-                    </Button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {unassignedTasks.map(task => (
-                    <SelectableTaskCard
-                      key={task.id}
-                      task={task}
-                      isSelected={selectedTasks.has(task.id)}
-                      onSelect={() => toggleTaskSelection(task.id)}
-                    />
-                  ))}
-                </div>
-
-                {unassignedTasks.length === 0 && (
-                  <div className="text-center py-8 text-green-600">
-                    <p className="text-lg font-medium">Tất cả nhiệm vụ đã được phân công!</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  onClick={() => {
-                    setWorkflowStep('review');
-                    setShowBottomSheet(true);
-                  }}
-                  disabled={assignedTasks.length === 0}
-                >
-                  Tiếp theo: Kiểm tra ({assignedTasks.length} nhiệm vụ đã gán)
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {tasks.length === 0 && (
-            <div className="text-center py-12 text-secondary/60">
-              <div className="space-y-2">
-                <p className="text-lg">Chưa có nhiệm vụ nào được tạo</p>
-                <p className="text-sm">Bạn cần phê duyệt BOM trước khi có thể phân công nhiệm vụ</p>
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Bottom Sheet for Step 2 & 3 */}
-      {showBottomSheet && workflowStep !== 'assign' && (
-        <>
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40"
-            onClick={() => {
-              setShowBottomSheet(false);
-              setWorkflowStep('assign');
-            }}
-          />
-
-          {/* Bottom Sheet */}
-          <div className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-xl shadow-2xl h-[85vh] overflow-hidden animate-slide-up">
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-secondary">
-                  {workflowStep === 'review'
-                    ? 'Bước 2: Kiểm tra và điều chỉnh phân công'
-                    : 'Bước 3: Xác nhận hoàn tất phân công'
-                  }
-                </h3>
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setShowBottomSheet(false);
-                      setWorkflowStep('assign');
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="h-[calc(85vh-80px)] overflow-y-auto">
-              {workflowStep === 'review' ? (
-                <ReviewWorkshopColumns
-                  tasks={tasks}
-                  workshops={workshops}
-                  draggedTask={draggedTask}
-                  setDraggedTask={setDraggedTask}
-                  handleDrop={handleDrop}
-                  setWorkflowStep={setWorkflowStep}
-                  setShowBottomSheet={setShowBottomSheet}
-                />
-              ) : (
-                <div className="p-4">
-                  <ConfirmationSummary
-                    tasks={tasks}
-                    workshops={workshops}
-                    saveTaskAssignments={saveTaskAssignments}
-                    setWorkflowStep={setWorkflowStep}
-                    setShowBottomSheet={setShowBottomSheet}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
 
     </div>
   );
 };
-
-// Reusable Task Card Component with expandable details
-interface TaskCardProps {
-  task: TaskItem;
-  mode: 'selectable' | 'draggable';
-  isSelected?: boolean;
-  onSelect?: () => void;
-  onDragStart?: () => void;
-}
-
-const TaskCard = React.memo(({ task, mode, isSelected, onSelect, onDragStart }: TaskCardProps) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  const handleClick = (e: React.MouseEvent) => {
-    if (mode === 'selectable' && onSelect) {
-      onSelect();
-    }
-  };
-
-  const handleToggleExpand = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsExpanded(!isExpanded);
-  };
-
-  const cardContent = (
-    <div className="space-y-3">
-      {/* Task Header */}
-      <div className="flex items-center justify-between">
-        <h4 className={cn(
-          "font-bold text-secondary",
-          mode === 'draggable' ? "text-sm" : "text-base"
-        )}>
-          {task.profile}
-        </h4>
-        <div className="flex items-center gap-2">
-          {task.material && (
-            <Badge className="text-xs bg-gray-100 text-gray-600">
-              {task.material}
-            </Badge>
-          )}
-          {mode === 'selectable' && isSelected && (
-            <div className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold">
-              ✓
-            </div>
-          )}
-          {/* Expand/Collapse Button */}
-          <button
-            onClick={handleToggleExpand}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            <ChevronRight className={cn(
-              "h-4 w-4 transition-transform",
-              isExpanded && "rotate-90"
-            )} />
-          </button>
-        </div>
-      </div>
-
-      {/* Key Metrics */}
-      <div className={cn(
-        "grid gap-3 text-center",
-        mode === 'draggable' ? "grid-cols-2 text-xs" : "grid-cols-3 text-sm"
-      )}>
-        <div>
-          <div className="font-bold text-blue-600">{task.totalQty}</div>
-          <div className="text-gray-500">Số lượng</div>
-        </div>
-        <div>
-          <div className="font-bold text-purple-600">{task.subtasks.length}</div>
-          <div className="text-gray-500">Nhóm</div>
-        </div>
-        {mode === 'selectable' && (
-          <div>
-            <div className="font-bold text-green-600">{task.totalArea.toFixed(1)}</div>
-            <div className="text-gray-500">Diện tích (m²)</div>
-          </div>
-        )}
-      </div>
-
-      {/* Expandable Details */}
-      {isExpanded && (
-        <div className="border-t pt-3 space-y-2">
-          <div className="text-xs text-gray-600 font-medium">Chi tiết nhóm chính:</div>
-          <div className="space-y-1 max-h-32 overflow-y-auto">
-            {task.subtasks.map((subtask, index) => (
-              <div key={index} className="text-xs bg-gray-50 rounded p-2 flex justify-between">
-                <div className="flex gap-2">
-                  <span className="font-medium text-blue-600">#{subtask.index}</span>
-                  <span className="truncate">{subtask.part_name || subtask.ass_name}</span>
-                </div>
-                <div className="flex gap-3 text-gray-500 shrink-0">
-                  <span>SL: {subtask.qty_total || 0}</span>
-                  {subtask.welding_machine && (
-                    <span className="text-purple-600">Máy: {subtask.welding_machine}</span>
-                  )}
-                  {subtask.hand_welding && (
-                    <span className="text-orange-600">Tay: {subtask.hand_welding}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  if (mode === 'draggable') {
-    return (
-      <div
-        draggable
-        onDragStart={(e) => {
-          onDragStart?.();
-          e.dataTransfer.effectAllowed = 'move';
-        }}
-        className="bg-white border border-gray-200 rounded-lg p-3 cursor-move shadow-sm"
-      >
-        {cardContent}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        'border-2 rounded-lg p-4 cursor-pointer',
-        isSelected
-          ? 'border-primary bg-primary/10'
-          : 'border-gray-200 bg-white hover:border-gray-300'
-      )}
-      onClick={handleClick}
-    >
-      {cardContent}
-    </div>
-  );
-});
-
-TaskCard.displayName = 'TaskCard';
-
-// Step 1: Selectable Task Card wrapper
-interface SelectableTaskCardProps {
-  task: TaskItem;
-  isSelected: boolean;
-  onSelect: () => void;
-}
-
-const SelectableTaskCard = React.memo(({ task, isSelected, onSelect }: SelectableTaskCardProps) => {
-  return (
-    <TaskCard
-      task={task}
-      mode="selectable"
-      isSelected={isSelected}
-      onSelect={onSelect}
-    />
-  );
-});
-
-SelectableTaskCard.displayName = 'SelectableTaskCard';
-
-// Step 2: Drag & Drop Workshop Columns in Bottom Sheet
-const ReviewWorkshopColumns = React.memo<{
-  tasks: TaskItem[];
-  workshops: Workshop[];
-  draggedTask: string | null;
-  setDraggedTask: (id: string | null) => void;
-  handleDrop: (e: React.DragEvent, workshopId: string | null) => void;
-  setWorkflowStep: (step: 'assign' | 'review' | 'confirm') => void;
-  setShowBottomSheet: (show: boolean) => void;
-}>(({ tasks, workshops, draggedTask, setDraggedTask, handleDrop, setWorkflowStep, setShowBottomSheet }) => {
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Sticky Controls */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
-        <p className="text-sm text-gray-600 mb-4">
-          Kéo thả nhiệm vụ giữa các xưởng để điều chỉnh phân công
-        </p>
-        <div className="flex justify-between">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setWorkflowStep('assign');
-              setShowBottomSheet(false);
-            }}
-          >
-            Quay lại bước 1
-          </Button>
-          <Button
-            onClick={() => setWorkflowStep('confirm')}
-          >
-            Xác nhận hoàn tất
-          </Button>
-        </div>
-      </div>
-
-      {/* Sticky Column Headers */}
-      <div className="sticky top-[120px] bg-white border-b border-gray-200 z-10">
-        <div className="grid grid-cols-5 gap-3 p-4">
-          {workshops.map(workshop => {
-            const workshopTasks = tasks.filter(task => task.assignedWorkshops.includes(workshop.id));
-            return (
-              <div key={workshop.id} className={cn("p-3 rounded-lg text-center", workshop.color)}>
-                <h4 className="font-bold text-sm">{workshop.code}</h4>
-                <div className="text-xs">{workshop.name}</div>
-                <div className="text-xs font-medium">{workshopTasks.length} nhiệm vụ</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Scrollable Workshop Columns */}
-      <div className="flex-1 p-4 overflow-y-auto">
-        <div className="grid grid-cols-5 gap-3">
-          {workshops.map(workshop => {
-            const workshopTasks = tasks.filter(task => task.assignedWorkshops.includes(workshop.id));
-            return (
-              <div key={workshop.id}>
-                <div
-                  className="min-h-[500px] bg-white border-2 border-dashed border-gray-300 rounded-lg p-2 space-y-2"
-                  onDrop={(e) => handleDrop(e, workshop.id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.add('border-primary', 'bg-primary/5');
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
-                  }}
-                >
-                  {workshopTasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      mode="draggable"
-                      onDragStart={() => setDraggedTask(task.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-ReviewWorkshopColumns.displayName = 'ReviewWorkshopColumns';
-
-
-// Step 3: Confirmation Summary
-const ConfirmationSummary = React.memo<{
-  tasks: TaskItem[];
-  workshops: Workshop[];
-  saveTaskAssignments: () => void;
-  setWorkflowStep: (step: 'assign' | 'review' | 'confirm') => void;
-  setShowBottomSheet: (show: boolean) => void;
-}>(({ tasks, workshops, saveTaskAssignments, setWorkflowStep, setShowBottomSheet }) => {
-
-  const workshopSummary = workshops.map(workshop => ({
-    ...workshop,
-    tasks: tasks.filter(task => task.assignedWorkshops.includes(workshop.id))
-  }));
-
-  return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-xl font-semibold text-green-600 mb-2">
-          Phân công hoàn tất!
-        </h3>
-        <p className="text-gray-600">
-          Xem lại tóm tắt phân công và xác nhận để chuyển sang quy trình sản xuất
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        {workshopSummary.map(workshop => (
-          <div
-            key={workshop.id}
-            className={cn('p-4 rounded-lg', workshop.color)}
-          >
-            <h4 className="font-bold text-center mb-3">
-              {workshop.code} - {workshop.name}
-            </h4>
-            <div className="text-center mb-3">
-              <div className="text-2xl font-bold">{workshop.tasks.length}</div>
-              <div className="text-sm">nhiệm vụ</div>
-            </div>
-            {workshop.tasks.length > 0 && (
-              <div className="space-y-1 text-xs">
-                {workshop.tasks.map(task => (
-                  <div key={task.id} className="truncate">
-                    • {task.profile}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-between">
-        <Button
-          variant="secondary"
-          onClick={() => setWorkflowStep('review')}
-        >
-          Quay lại điều chỉnh
-        </Button>
-        <Button
-          onClick={() => {
-            saveTaskAssignments();
-            setWorkflowStep('assign');
-            setShowBottomSheet(false);
-            // Navigate to workshop flow
-          }}
-          className="bg-green-600 hover:bg-green-700 text-white"
-        >
-          Xác nhận và chuyển sang quy trình sản xuất
-        </Button>
-      </div>
-    </div>
-  );
-});
-
-ConfirmationSummary.displayName = 'ConfirmationSummary';
-
 
 const BomTable = ({ data }: { data: BomTreeNode[] }) => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -2186,6 +1350,7 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
 
   const formatValue = (value: unknown): string => {
     if (value === null || value === undefined) return '—';
+    if (value === '' || value === 0) return '—';
     if (Array.isArray(value)) {
       return value.join(' x ');
     }
@@ -2193,34 +1358,39 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
   };
 
   const tableHeaders = [
-    'STT',
+    'NO',
+    'Dự án_ID',
     'Cấu kiện',
-    'Chi tiết',
-    'Quy cách',
+    'Tên ck',
+    'Tên chi tiết',
+    'Tiết diện',
     'Vật liệu',
     'Dày',
     'Rộng',
     'Dài',
-    'SL/1CK',
-    'SL Tổng',
-    'KL CT',
-    'KL/1CKL',
-    'KL Tổng',
-    'Hàn máy',
-    'Hàn tay',
-    'Ghi chú',
+    'SL/CK',
+    'SL tổng',
+    'KL_CT',
+    'KL/CK tổ hợp',
+    'KL/CK',
+    'KL tổng',
+    'Area 1 Ass',
+    'Area Total',
+    'welding machine',
+    'hand welding',
+    'Note',
   ];
 
   return (
-    <div className="overflow-auto max-h-[50vh] border border-gray-200 rounded-lg">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-50">
-            <th className="w-8 border border-gray-200 p-2"></th>
+    <div className="overflow-auto max-h-[60vh] border border-gray-300 rounded-lg shadow-sm">
+      <table className="w-full border-collapse text-sm">
+        <thead className="sticky top-0 z-10">
+          <tr className="bg-gradient-to-r from-gray-100 to-gray-50 border-b-2 border-gray-300">
+            <th className="w-10 border-r border-gray-300 p-3 bg-gray-100"></th>
             {tableHeaders.map((header, index) => (
               <th
                 key={index}
-                className="border border-gray-200 p-2 text-left text-xs font-medium text-gray-700 whitespace-nowrap"
+                className="border-r border-gray-300 px-3 py-3 text-left text-xs font-semibold text-gray-700 whitespace-nowrap bg-gray-50 last:border-r-0"
               >
                 {header}
               </th>
@@ -2230,70 +1400,82 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
         <tbody>
           {data.map(parent => (
             <React.Fragment key={`parent-${parent.index}`}>
-              <tr className="bg-white hover:bg-gray-50">
-                <td className="border border-gray-200 p-2">
+              <tr className="bg-white hover:bg-blue-50 transition-colors border-b border-gray-200">
+                <td className="border-r border-gray-300 p-2 bg-gray-50">
                   {parent.children.length > 0 && (
                     <button
                       onClick={() => toggleRowExpansion(parent.index!)}
-                      className="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-100"
+                      className="flex items-center justify-center w-6 h-6 rounded hover:bg-blue-100 transition-colors"
                     >
                       {expandedRows.has(parent.index!) ? (
-                        <ChevronDown className="h-4 w-4" />
+                        <ChevronDown className="h-4 w-4 text-blue-600" />
                       ) : (
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-4 w-4 text-gray-500" />
                       )}
                     </button>
                   )}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm font-medium">
+                <td className="border-r border-gray-200 px-3 py-2.5 font-semibold text-blue-700 bg-blue-50">
                   {formatValue(parent.index)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
+                  {formatValue(parent.project_id)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5 font-medium">
+                  {formatValue(parent.assembly_id)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.ass_name)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.part_name)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.profile)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5">
                   {formatValue(parent.material)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.thickness)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.width)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.length)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.qty_per_ass)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center font-medium">
                   {formatValue(parent.qty_total)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
                   {formatValue(parent.weight_per_part)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
+                  {formatValue(parent.weight_combination)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
+                  {formatValue(parent.weight_per_ass)}
+                </td>
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right font-medium">
                   {formatValue(parent.weight_total)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
                   {formatValue(parent.area_per_ass)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-right font-medium">
                   {formatValue(parent.area_total)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.welding_machine)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
                   {formatValue(parent.hand_welding)}
                 </td>
-                <td className="border border-gray-200 p-2 text-sm">
+                <td className="px-3 py-2.5 text-xs text-gray-600">
                   {formatValue(parent.note)}
                 </td>
               </tr>
@@ -2301,58 +1483,70 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
                 parent.children.map((child, childIndex) => (
                   <tr
                     key={`child-${parent.index}-${childIndex}`}
-                    className="bg-gray-25"
+                    className="bg-gray-50/50 hover:bg-gray-100 transition-colors border-b border-gray-100"
                   >
-                    <td className="border border-gray-200 p-2"></td>
-                    <td className="border border-gray-200 p-2 text-sm text-gray-500">
+                    <td className="border-r border-gray-300 p-2 bg-gray-100"></td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-400 text-xs bg-gray-50">
                       —
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
+                      {formatValue(child.project_id)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
+                      {formatValue(child.assembly_id)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-700">
                       {formatValue(child.ass_name)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-700">
                       {formatValue(child.part_name)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
                       {formatValue(child.profile)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
                       {formatValue(child.material)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.thickness)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.width)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.length)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.qty_per_ass)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-700">
                       {formatValue(child.qty_total)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
                       {formatValue(child.weight_per_part)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
+                      {formatValue(child.weight_combination)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
+                      {formatValue(child.weight_per_ass)}
+                    </td>
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-700">
                       {formatValue(child.weight_total)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
                       {formatValue(child.area_per_ass)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-700">
                       {formatValue(child.area_total)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.welding_machine)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
                       {formatValue(child.hand_welding)}
                     </td>
-                    <td className="border border-gray-200 p-2 text-sm">
+                    <td className="px-3 py-2 text-xs text-gray-500">
                       {formatValue(child.note)}
                     </td>
                   </tr>
