@@ -38,6 +38,9 @@ interface WorkshopWorker {
   avatar?: string;
   experience: 'junior' | 'senior' | 'expert';
   currentTaskId?: string;
+  birthYear?: number;
+  address?: string;
+  yearsOfExperience?: number;
 }
 
 interface WorkshopZone {
@@ -386,7 +389,7 @@ const WorkshopPage = () => {
   };
 
   const loadWorkshopWorkers = () => {
-    // Mock 20 workers data
+    // Mock 20 workers data with complete profiles
     const mockWorkers: WorkshopWorker[] = [
       {
         id: 'w1',
@@ -394,6 +397,9 @@ const WorkshopPage = () => {
         role: 'Thợ hàn chính',
         specialties: ['Hàn TIG', 'Hàn MIG'],
         experience: 'expert',
+        birthYear: 1978,
+        address: 'Quận 12, TP.HCM',
+        yearsOfExperience: 15,
       },
       {
         id: 'w2',
@@ -401,6 +407,9 @@ const WorkshopPage = () => {
         role: 'Thợ cắt CNC',
         specialties: ['Cắt laser', 'Cắt plasma'],
         experience: 'senior',
+        birthYear: 1985,
+        address: 'Bình Thạnh, TP.HCM',
+        yearsOfExperience: 10,
       },
       {
         id: 'w3',
@@ -408,6 +417,9 @@ const WorkshopPage = () => {
         role: 'Thợ gia công',
         specialties: ['Phay', 'Tiện'],
         experience: 'senior',
+        birthYear: 1982,
+        address: 'Tân Bình, TP.HCM',
+        yearsOfExperience: 12,
       },
       {
         id: 'w4',
@@ -415,6 +427,9 @@ const WorkshopPage = () => {
         role: 'Thợ hoàn thiện',
         specialties: ['Sơn', 'Mạ'],
         experience: 'junior',
+        birthYear: 1995,
+        address: 'Gò Vấp, TP.HCM',
+        yearsOfExperience: 3,
       },
       {
         id: 'w5',
@@ -422,6 +437,9 @@ const WorkshopPage = () => {
         role: 'Thợ hàn',
         specialties: ['Hàn que', 'Hàn CO2'],
         experience: 'senior',
+        birthYear: 1980,
+        address: 'Thủ Đức, TP.HCM',
+        yearsOfExperience: 13,
       },
       {
         id: 'w6',
@@ -429,6 +447,9 @@ const WorkshopPage = () => {
         role: 'Thợ kiểm tra',
         specialties: ['QC', 'Đo lường'],
         experience: 'expert',
+        birthYear: 1975,
+        address: 'Quận 9, TP.HCM',
+        yearsOfExperience: 18,
       },
       {
         id: 'w7',
@@ -436,6 +457,9 @@ const WorkshopPage = () => {
         role: 'Thợ cắt',
         specialties: ['Cắt thủ công', 'Máy cưa'],
         experience: 'junior',
+        birthYear: 1998,
+        address: 'Bình Tân, TP.HCM',
+        yearsOfExperience: 2,
       },
       {
         id: 'w8',
@@ -443,6 +467,9 @@ const WorkshopPage = () => {
         role: 'Thợ lắp ráp',
         specialties: ['Lắp ráp', 'Điều chỉnh'],
         experience: 'senior',
+        birthYear: 1986,
+        address: 'Quận 7, TP.HCM',
+        yearsOfExperience: 9,
       },
       {
         id: 'w9',
@@ -450,6 +477,9 @@ const WorkshopPage = () => {
         role: 'Thợ hàn',
         specialties: ['Hàn argon', 'Hàn điện'],
         experience: 'senior',
+        birthYear: 1983,
+        address: 'Tân Phú, TP.HCM',
+        yearsOfExperience: 11,
       },
       {
         id: 'w10',
@@ -457,6 +487,9 @@ const WorkshopPage = () => {
         role: 'Thợ gia công',
         specialties: ['Khoan', 'Taro'],
         experience: 'junior',
+        birthYear: 1997,
+        address: 'Phú Nhuận, TP.HCM',
+        yearsOfExperience: 4,
       },
       {
         id: 'w11',
@@ -464,6 +497,9 @@ const WorkshopPage = () => {
         role: 'Thợ cắt laser',
         specialties: ['Laser fiber', 'Programming'],
         experience: 'expert',
+        birthYear: 1977,
+        address: 'Quận 1, TP.HCM',
+        yearsOfExperience: 16,
       },
       {
         id: 'w12',
@@ -471,6 +507,9 @@ const WorkshopPage = () => {
         role: 'Thợ sơn',
         specialties: ['Sơn tĩnh điện', 'Sơn nước'],
         experience: 'senior',
+        birthYear: 1984,
+        address: 'Quận 8, TP.HCM',
+        yearsOfExperience: 10,
       },
       {
         id: 'w13',
@@ -478,6 +517,9 @@ const WorkshopPage = () => {
         role: 'Thợ phay',
         specialties: ['Phay CNC', 'Phay thủ công'],
         experience: 'expert',
+        birthYear: 1976,
+        address: 'Quận 11, TP.HCM',
+        yearsOfExperience: 17,
       },
       {
         id: 'w14',
@@ -485,6 +527,9 @@ const WorkshopPage = () => {
         role: 'Thợ tiện',
         specialties: ['Tiện CNC', 'Tiện thủ công'],
         experience: 'senior',
+        birthYear: 1987,
+        address: 'Quận 6, TP.HCM',
+        yearsOfExperience: 8,
       },
       {
         id: 'w15',
@@ -492,6 +537,9 @@ const WorkshopPage = () => {
         role: 'Thợ hàn',
         specialties: ['Hàn tự động', 'Robot hàn'],
         experience: 'expert',
+        birthYear: 1979,
+        address: 'Quận 10, TP.HCM',
+        yearsOfExperience: 14,
       },
       {
         id: 'w16',
@@ -499,6 +547,9 @@ const WorkshopPage = () => {
         role: 'Thợ kiểm tra',
         specialties: ['NDT', 'Siêu âm'],
         experience: 'expert',
+        birthYear: 1974,
+        address: 'Quận 3, TP.HCM',
+        yearsOfExperience: 19,
       },
       {
         id: 'w17',
@@ -506,6 +557,9 @@ const WorkshopPage = () => {
         role: 'Thợ cắt',
         specialties: ['Cắt oxy', 'Cắt plasma'],
         experience: 'junior',
+        birthYear: 1999,
+        address: 'Quận 5, TP.HCM',
+        yearsOfExperience: 2,
       },
       {
         id: 'w18',
@@ -513,6 +567,9 @@ const WorkshopPage = () => {
         role: 'Thợ lắp ráp',
         specialties: ['Lắp kết cấu', 'Đo kiểm'],
         experience: 'senior',
+        birthYear: 1988,
+        address: 'Quận 4, TP.HCM',
+        yearsOfExperience: 7,
       },
       {
         id: 'w19',
@@ -520,6 +577,9 @@ const WorkshopPage = () => {
         role: 'Thợ hàn TIG',
         specialties: ['Hàn inox', 'Hàn nhôm'],
         experience: 'expert',
+        birthYear: 1981,
+        address: 'Quận 2, TP.HCM',
+        yearsOfExperience: 12,
       },
       {
         id: 'w20',
@@ -527,6 +587,9 @@ const WorkshopPage = () => {
         role: 'Thợ hoàn thiện',
         specialties: ['Đánh bóng', 'Kiểm tra cuối'],
         experience: 'junior',
+        birthYear: 1996,
+        address: 'Bình Chánh, TP.HCM',
+        yearsOfExperience: 3,
       },
     ];
     setWorkers(mockWorkers);
