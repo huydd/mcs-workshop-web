@@ -576,88 +576,65 @@ export const TaskDetailModal = ({
           </p>
         </div>
 
-        {/* Section 0: Pending Review Assignments */}
+        {/* Section 0: Pending Review Assignments - Compact */}
         {pendingReviewAssignments.length > 0 && (
-          <Card padding="lg" className="border-2 border-yellow-300 bg-yellow-50/50">
+          <Card padding="md" className="border-2 border-yellow-300 bg-yellow-50/50">
             <div
-              className="flex items-center justify-between cursor-pointer"
+              className="flex items-center justify-between cursor-pointer mb-2"
               onClick={() => setShowPendingReview(!showPendingReview)}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button className="text-yellow-700">
                   {showPendingReview ? (
-                    <ChevronUp className="w-5 h-5" />
+                    <ChevronUp className="w-4 h-4" />
                   ) : (
-                    <ChevronDown className="w-5 h-5" />
+                    <ChevronDown className="w-4 h-4" />
                   )}
                 </button>
-                <div>
-                  <h4 className="text-lg font-semibold text-yellow-900">
-                    Chờ xác nhận
-                  </h4>
-                  <p className="text-sm text-yellow-700">
-                    {pendingReviewAssignments.length} công việc đã hoàn thành, cần kiểm tra
-                  </p>
-                </div>
+                <h4 className="text-sm font-semibold text-yellow-900">
+                  Chờ xác nhận
+                </h4>
+                <Badge className="bg-yellow-600 text-white text-xs">
+                  {pendingReviewAssignments.length} việc
+                </Badge>
               </div>
-              <Badge className="bg-yellow-600 text-white">
-                {pendingReviewAssignments.length} việc
-              </Badge>
             </div>
 
             {showPendingReview && (
-              <div className="mt-4 space-y-2 max-h-[35vh] overflow-y-auto">
-                {pendingReviewAssignments.map((assignment, aIdx) => {
-                  const subtask = task.subtasks[assignment.subtaskIndex];
-                  const doneDate = new Date(assignment.doneAt!);
-
-                  return (
-                    <div
-                      key={aIdx}
-                      className="p-4 border-2 border-yellow-200 bg-white rounded-lg"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <p className="font-semibold text-gray-900">
-                            {assignment.subtaskName}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">
-                            {task.profile} | Số lượng: {assignment.quantity}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
-                            <Users className="w-3 h-3" />
-                            <span>{assignment.workerName}</span>
-                            <span>•</span>
-                            <span>Hoàn thành: {doneDate.toLocaleString('vi-VN')}</span>
-                          </div>
-                        </div>
-                        <Badge className="bg-green-600 text-white text-xs">
-                          ✓ Done by {assignment.doneBy}
-                        </Badge>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                          onClick={() => handleReview(assignment, 'approve')}
-                        >
-                          <CheckCircle2 className="w-4 h-4 mr-1" />
-                          Xác nhận xong
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 border-red-300"
-                          onClick={() => handleReview(assignment, 'reject')}
-                        >
-                          <X className="w-4 h-4 mr-1" />
-                          Yêu cầu sửa
-                        </Button>
-                      </div>
+              <div className="mt-2 space-y-1 max-h-[30vh] overflow-y-auto">
+                {pendingReviewAssignments.map((assignment, aIdx) => (
+                  <div
+                    key={aIdx}
+                    className="p-2 border border-yellow-200 bg-white rounded flex items-center justify-between gap-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm truncate">
+                        {assignment.subtaskName}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {assignment.workerName} • SL: {assignment.quantity}
+                      </p>
                     </div>
-                  );
-                })}
+                    <div className="flex gap-1 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 text-xs"
+                        onClick={() => handleReview(assignment, 'approve')}
+                      >
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Xác nhận
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 text-xs"
+                        onClick={() => handleReview(assignment, 'reject')}
+                      >
+                        <X className="w-3 h-3 mr-1" />
+                        Sửa
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </Card>
@@ -686,7 +663,7 @@ export const TaskDetailModal = ({
             </div>
           </div>
 
-          <div className="space-y-2 max-h-[45vh] overflow-y-auto">
+          <div className="space-y-1.5 max-h-[45vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
             {/* Show all subtasks filtered by search */}
             {subtasksWithStatus
               .filter(s => {
@@ -707,77 +684,61 @@ export const TaskDetailModal = ({
                   <div
                     key={subtask.index}
                     className={cn(
-                      'p-4 border-2 rounded-lg transition-all',
+                      'p-2 border rounded-lg transition-all flex items-center gap-2',
                       isFullyAssigned
-                        ? 'border-green-200 bg-green-50/30'
+                        ? 'border-green-300 bg-green-50'
                         : isSelected
-                          ? 'border-primary bg-primary/5 shadow-md'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50',
+                          ? 'border-primary bg-primary/5'
+                          : 'border-gray-300 hover:border-gray-400 bg-white',
                     )}
                   >
-                    <div className="flex items-center gap-4">
-                      {/* Checkbox - only for unassigned/partially assigned */}
-                      {!isFullyAssigned && (
-                        <div
-                          onClick={() => toggleSubtask(subtask.index)}
-                          className={cn(
-                            'w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer',
-                            isSelected
-                              ? 'bg-primary border-primary'
-                              : 'border-gray-300',
-                          )}
-                        >
-                          {isSelected && <Check className="w-4 h-4 text-white" />}
-                        </div>
-                      )}
-
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">
-                          {subtask.part_name || `Chi tiết ${subtask.index + 1}`}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Tiết diện: {task.profile}
-                        </p>
-                      </div>
-
-                      <div className="text-right flex items-center gap-3">
-                        {isFullyAssigned ? (
-                          <>
-                            <div>
-                              <Badge className="bg-green-100 text-green-700 text-xs mb-1">
-                                ✓ Đã giao đủ: {subtask.assignedQty}/{totalQty}
-                              </Badge>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setReassigningSubtask(subtask.index);
-                                // TODO: Open reassignment modal/flow
-                              }}
-                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-                            >
-                              Phân công lại
-                            </Button>
-                          </>
-                        ) : subtask.assignedQty > 0 ? (
-                          <div>
-                            <Badge className="bg-orange-100 text-orange-700 text-xs mb-1">
-                              Đã giao: {subtask.assignedQty}/{totalQty}
-                            </Badge>
-                            <p className="text-xs text-gray-600">
-                              Còn: <strong className="text-orange-600">{remainingQty}</strong>
-                            </p>
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="text-xs text-gray-600">Tổng số lượng</p>
-                            <p className="text-xl font-bold text-gray-900">
-                              {totalQty}
-                            </p>
-                          </div>
+                    {/* Checkbox - only for unassigned/partially assigned */}
+                    {!isFullyAssigned && (
+                      <div
+                        onClick={() => toggleSubtask(subtask.index)}
+                        className={cn(
+                          'w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 cursor-pointer',
+                          isSelected
+                            ? 'bg-primary border-primary'
+                            : 'border-gray-400',
                         )}
+                      >
+                        {isSelected && <Check className="w-3 h-3 text-white" />}
                       </div>
+                    )}
+
+                    {/* Name - flex-1 to take remaining space */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm truncate">
+                        {subtask.part_name || `Chi tiết ${subtask.index + 1}`}
+                      </p>
+                    </div>
+
+                    {/* Status badge */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {isFullyAssigned ? (
+                        <>
+                          <Badge className="bg-green-600 text-white text-xs">
+                            Đã giao {subtask.assignedQty}/{totalQty}
+                          </Badge>
+                          <Button
+                            size="sm"
+                            onClick={() => setReassigningSubtask(subtask.index)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1"
+                          >
+                            Phân công lại
+                          </Button>
+                        </>
+                      ) : (
+                        <Badge className={cn(
+                          "text-xs",
+                          subtask.assignedQty > 0
+                            ? "bg-orange-100 text-orange-700"
+                            : "bg-gray-100 text-gray-700"
+                        )}>
+                          Đã giao {subtask.assignedQty}/{totalQty}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 );
@@ -791,20 +752,10 @@ export const TaskDetailModal = ({
                 task.profile.toLowerCase().includes(search)
               );
             }).length === 0 && (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-gray-400">
                 Không tìm thấy công việc phù hợp
               </div>
             )}
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm font-medium text-gray-700">
-              Đã chọn:{' '}
-              <strong className="text-primary text-lg">
-                {selectedSubtasks.length}
-              </strong>{' '}
-              công việc
-            </p>
           </div>
         </Card>
       </div>
@@ -1583,17 +1534,18 @@ export const TaskDetailModal = ({
 
   return (
     <>
-      {/* Reassignment Modal */}
+      {/* Reassignment Modal - Modern Design */}
       {reassigningSubtask !== null && (
         <>
           <div className="fixed inset-0 bg-black/60 z-[60]" onClick={() => setReassigningSubtask(null)} />
           <div className="fixed inset-0 flex items-center justify-center z-[60] p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
               {/* Header */}
-              <div className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-blue-100">
+              <div className="px-6 py-4 border-b bg-gradient-to-br from-primary/5 via-blue-50 to-primary/10">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900">
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-primary" />
                       Phân công lại
                     </h3>
                     <p className="text-sm text-gray-600 mt-1">
@@ -1602,7 +1554,7 @@ export const TaskDetailModal = ({
                   </div>
                   <button
                     onClick={() => setReassigningSubtask(null)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="p-2 hover:bg-white/50 rounded-lg transition-colors"
                   >
                     <X className="h-5 w-5 text-gray-500" />
                   </button>
@@ -1621,102 +1573,99 @@ export const TaskDetailModal = ({
 
                   return (
                     <div className="space-y-4">
-                      {/* Summary */}
-                      <Card padding="md" className="bg-blue-50 border-blue-200">
-                        <div className="grid grid-cols-3 gap-4 text-center">
-                          <div>
-                            <p className="text-xs text-gray-600 mb-1">Tổng số lượng</p>
-                            <p className="text-2xl font-bold text-gray-900">{totalQty}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-600 mb-1">Đã phân công</p>
-                            <p className="text-2xl font-bold text-green-700">{assignedQty}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-600 mb-1">Số người</p>
-                            <p className="text-2xl font-bold text-primary">{currentAssignments.length}</p>
-                          </div>
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3 text-center border border-blue-200">
+                          <p className="text-xs text-blue-700 font-medium mb-1">Tổng SL</p>
+                          <p className="text-2xl font-bold text-blue-900">{totalQty}</p>
                         </div>
-                      </Card>
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-3 text-center border border-green-200">
+                          <p className="text-xs text-green-700 font-medium mb-1">Đã giao</p>
+                          <p className="text-2xl font-bold text-green-900">{assignedQty}</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-3 text-center border border-purple-200">
+                          <p className="text-xs text-purple-700 font-medium mb-1">Số người</p>
+                          <p className="text-2xl font-bold text-purple-900">{currentAssignments.length}</p>
+                        </div>
+                      </div>
 
                       {/* Current Assignments */}
                       <div>
-                        <h4 className="font-semibold text-gray-900 mb-3">
+                        <h4 className="font-semibold text-gray-900 mb-3 text-sm">
                           Phân công hiện tại
                         </h4>
                         {currentAssignments.length === 0 ? (
-                          <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                            Chưa có phân công nào
+                          <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                            <Users className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">Chưa có phân công</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
                             {currentAssignments.map((assignment, idx) => {
                               const startDate = new Date(assignment.startDate);
                               const endDate = new Date(assignment.endDate);
+                              const daysCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
                               return (
-                                <Card key={idx} padding="md" className="border-2 border-gray-200">
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Users className="w-5 h-5 text-primary" />
-                                        <p className="font-semibold text-gray-900 text-lg">
-                                          {assignment.workerName}
-                                        </p>
-                                        <Badge className="bg-blue-100 text-blue-700">
-                                          SL: {assignment.quantity}
-                                        </Badge>
+                                <div key={idx} className="group relative bg-gradient-to-r from-gray-50 to-white border-2 border-gray-200 hover:border-primary/30 rounded-xl p-3 transition-all">
+                                  <div className="flex items-start gap-3">
+                                    {/* Icon */}
+                                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                      <Users className="w-5 h-5 text-primary" />
+                                    </div>
+
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-bold text-gray-900 mb-1">
+                                        {assignment.workerName}
+                                      </p>
+                                      <div className="flex items-center gap-3 text-xs text-gray-600 mb-2">
+                                        <span className="flex items-center gap-1">
+                                          <Calendar className="w-3 h-3" />
+                                          {daysCount} ngày công
+                                        </span>
+                                        <span className="flex items-center gap-1 font-semibold text-primary">
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          {assignment.quantity} chi tiết
+                                        </span>
                                       </div>
-                                      <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 ml-7">
-                                        <div>
-                                          <span className="text-xs text-gray-500">Từ ngày:</span>
-                                          <br />
-                                          <strong>{startDate.toLocaleDateString('vi-VN')}</strong>
-                                        </div>
-                                        <div>
-                                          <span className="text-xs text-gray-500">Đến ngày:</span>
-                                          <br />
-                                          <strong>{endDate.toLocaleDateString('vi-VN')}</strong>
-                                        </div>
+                                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        <span>{startDate.toLocaleDateString('vi-VN')}</span>
+                                        <span>→</span>
+                                        <span>{endDate.toLocaleDateString('vi-VN')}</span>
                                       </div>
-                                      {assignment.isDone && (
-                                        <div className="mt-2 ml-7">
-                                          <Badge className="bg-green-600 text-white text-xs">
-                                            ✓ Done by {assignment.doneBy} at {new Date(assignment.doneAt!).toLocaleDateString('vi-VN')}
-                                          </Badge>
-                                        </div>
-                                      )}
-                                      {assignment.isApproved && (
-                                        <div className="mt-2 ml-7">
-                                          <Badge className="bg-green-700 text-white text-xs">
-                                            ✓✓ Approved by {assignment.reviewedBy}
-                                          </Badge>
-                                        </div>
-                                      )}
-                                      {assignment.isRejected && (
-                                        <div className="mt-2 ml-7">
-                                          <Badge className="bg-red-600 text-white text-xs">
-                                            ✗ Rejected - needs revision
-                                          </Badge>
-                                          {assignment.reviewComment && (
-                                            <p className="text-xs text-red-700 mt-1">
-                                              "{assignment.reviewComment}"
-                                            </p>
+                                      {/* Status badges */}
+                                      {(assignment.isDone || assignment.isApproved || assignment.isRejected) && (
+                                        <div className="flex gap-1 mt-2">
+                                          {assignment.isApproved && (
+                                            <Badge className="bg-green-600 text-white text-xs">
+                                              ✓ Approved
+                                            </Badge>
+                                          )}
+                                          {assignment.isRejected && (
+                                            <Badge className="bg-red-600 text-white text-xs">
+                                              ✗ Rejected
+                                            </Badge>
+                                          )}
+                                          {assignment.isDone && !assignment.isApproved && !assignment.isRejected && (
+                                            <Badge className="bg-yellow-600 text-white text-xs">
+                                              ⏳ Pending review
+                                            </Badge>
                                           )}
                                         </div>
                                       )}
                                     </div>
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
+
+                                    {/* Delete button */}
+                                    <button
                                       onClick={() => handleReassignmentDelete(assignment)}
-                                      className="bg-red-50 hover:bg-red-100 text-red-700 border-red-300"
+                                      className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                                      title="Xóa phân công"
                                     >
-                                      <X className="w-4 h-4 mr-1" />
-                                      Xóa
-                                    </Button>
+                                      <X className="w-4 h-4" />
+                                    </button>
                                   </div>
-                                </Card>
+                                </div>
                               );
                             })}
                           </div>
@@ -1724,33 +1673,27 @@ export const TaskDetailModal = ({
                       </div>
 
                       {/* Instructions */}
-                      <Card padding="md" className="bg-yellow-50 border-yellow-200">
-                        <div className="flex items-start gap-3">
-                          <div className="w-6 h-6 rounded-full bg-yellow-500 text-white flex items-center justify-center flex-shrink-0 text-sm font-bold">
-                            !
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center flex-shrink-0 text-xs font-bold">
+                            i
                           </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-gray-900 mb-1">
-                              Hướng dẫn phân công lại
-                            </p>
-                            <ul className="text-sm text-gray-700 space-y-1">
-                              <li>• Xóa các phân công cũ nếu cần thay đổi người làm</li>
-                              <li>• Đóng cửa sổ này và chọn lại subtask để phân công mới</li>
-                              <li>• Phân công mới sẽ được thêm vào hoặc thay thế phân công cũ</li>
-                            </ul>
-                          </div>
+                          <p className="text-xs text-blue-900">
+                            Xóa phân công cũ rồi đóng cửa sổ này và chọn lại subtask để phân công mới
+                          </p>
                         </div>
-                      </Card>
+                      </div>
                     </div>
                   );
                 })()}
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+              <div className="flex items-center justify-end gap-3 px-6 py-3 border-t bg-gray-50">
                 <Button
                   variant="secondary"
                   onClick={() => setReassigningSubtask(null)}
+                  className="px-4"
                 >
                   Đóng
                 </Button>
