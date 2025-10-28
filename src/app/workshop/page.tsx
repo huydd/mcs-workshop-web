@@ -1535,7 +1535,7 @@ const TaskCard = ({
     const configs = {
       urgent: {
         label: 'Khẩn cấp',
-        color: 'text-red-500 border-red-300 bg-red-50',
+        color: 'text-rose-700 border-rose-400 bg-rose-100',
         icon: (
           <div className="flex flex-col -space-y-1.5">
             <ChevronDown className="w-3 h-3 rotate-180" />
@@ -1545,17 +1545,17 @@ const TaskCard = ({
       },
       high: {
         label: 'Cao',
-        color: 'text-orange-500 border-orange-300 bg-orange-50',
+        color: 'text-orange-700 border-orange-400 bg-orange-100',
         icon: <ChevronDown className="w-3 h-3 rotate-180" />,
       },
       medium: {
         label: 'Trung bình',
-        color: 'text-blue-500 border-blue-300 bg-blue-50',
+        color: 'text-blue-700 border-blue-400 bg-blue-100',
         icon: <ChevronDown className="w-3 h-3 rotate-90" />,
       },
       low: {
         label: 'Thấp',
-        color: 'text-gray-500 border-gray-300 bg-gray-50',
+        color: 'text-slate-600 border-slate-300 bg-slate-100',
         icon: <ChevronDown className="w-3 h-3" />,
       },
     };
@@ -1606,33 +1606,39 @@ const TaskCard = ({
         }
       }}
     >
-      <Card padding="md" className="hover:shadow-md transition-shadow">
+      <Card padding="md" className="hover:shadow-lg transition-all border-l-4 border-l-blue-500">
         {/* Task Title - Top, Click to open detail modal */}
         <div className="mb-3 cursor-pointer" onClick={() => onTaskEdit(task)}>
-          <h4 className="font-semibold text-gray-900 text-base leading-tight mb-1 hover:text-primary transition-colors">
-            {taskName}
-          </h4>
-          <p className="text-xs text-gray-600">
-            {task.material || 'Chưa có vật liệu'}
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <h4 className="font-bold text-gray-900 text-base leading-tight mb-1.5 hover:text-primary transition-colors">
+                {taskName}
+              </h4>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-slate-100 text-slate-700 text-xs font-medium">
+                  {task.material || 'Chưa có vật liệu'}
+                </Badge>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Metadata Row - Priority and Deadline aligned */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 text-xs text-gray-600">
-            <Calendar className="h-3 w-3" />
+        <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Calendar className="h-3.5 w-3.5 text-gray-400" />
             {task.endDate && daysRemaining !== null ? (
               daysRemaining >= 0 ? (
-                <span className="text-green-600 font-medium">
+                <span className="text-emerald-600 font-semibold">
                   Còn {daysRemaining} ngày
                 </span>
               ) : (
-                <span className="text-red-600 font-medium">
+                <span className="text-rose-600 font-semibold">
                   Trễ {Math.abs(daysRemaining)} ngày
                 </span>
               )
             ) : (
-              <span>Chưa có hạn</span>
+              <span className="text-gray-500">Chưa có hạn</span>
             )}
           </div>
 
@@ -1750,24 +1756,24 @@ const TaskCard = ({
 
         {/* Sub-items - Clean Cards */}
         {task.subtasks.length > 0 && (
-          <div className="border-t pt-3">
+          <div className="border-t pt-3 mt-3">
             <button
               onClick={() => setShowSubtasks(!showSubtasks)}
-              className="w-full flex items-center justify-between mb-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
+              className="w-full flex items-center justify-between mb-2 hover:bg-gray-50 rounded-lg p-2 transition-colors"
             >
-              <span className="text-xs font-semibold text-gray-700">
-                Chi tiết ({task.subtasks.length})
+              <span className="text-xs font-bold text-gray-700">
+                Chi tiết công việc ({task.subtasks.length})
               </span>
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 transition-transform text-gray-500',
+                  'h-4 w-4 transition-transform text-gray-400',
                   showSubtasks && 'rotate-180',
                 )}
               />
             </button>
 
             {showSubtasks && (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
                 {task.subtasks.map((subtask, idx) => {
                   const totalQty = subtask.qty_total || 0;
                   const percent = subtask.completionPercent || 0;
@@ -1776,17 +1782,17 @@ const TaskCard = ({
                   return (
                     <div
                       key={idx}
-                      className="bg-white border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition-all"
+                      className="bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-md p-2.5 hover:border-blue-300 hover:shadow-sm transition-all"
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-medium text-gray-900 flex-1">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-semibold text-gray-800 flex-1 truncate">
                           {subtask.part_name || `Part ${idx + 1}`}
                         </p>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-sm font-bold text-gray-900">
+                        <div className="flex items-baseline gap-1 ml-2">
+                          <span className="text-xs font-bold text-gray-900">
                             {completedQty}
                           </span>
-                          <span className="text-xs text-gray-500">/</span>
+                          <span className="text-xs text-gray-400">/</span>
                           <span className="text-xs text-gray-600">
                             {totalQty}
                           </span>
@@ -1794,16 +1800,16 @@ const TaskCard = ({
                       </div>
 
                       {/* Progress bar */}
-                      <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
                         <div
                           className={cn(
                             'h-full transition-all rounded-full',
                             percent === 100
-                              ? 'bg-green-500'
+                              ? 'bg-emerald-500'
                               : percent >= 75
                               ? 'bg-blue-500'
                               : percent >= 50
-                              ? 'bg-yellow-500'
+                              ? 'bg-amber-500'
                               : 'bg-orange-500',
                           )}
                           style={{ width: `${percent}%` }}
@@ -1818,10 +1824,10 @@ const TaskCard = ({
         )}
 
         {/* Stage Progress - Simplified */}
-        <div className="pt-3 border-t">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-700">
-              Giai đoạn
+        <div className="pt-3 border-t mt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-gray-700">
+              Giai đoạn hiện tại
             </span>
             <Button
               variant="ghost"
@@ -1830,7 +1836,7 @@ const TaskCard = ({
                 e.stopPropagation();
                 onComment?.(task.id);
               }}
-              className="h-7 px-2 text-xs"
+              className="h-6 px-2 text-xs hover:bg-blue-50"
             >
               <MessageSquare className="h-3 w-3 mr-1" />
               Ghi chú
@@ -1841,20 +1847,20 @@ const TaskCard = ({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               {/* Current Stage - Highlighted */}
-              <div className="flex-1 px-3 py-2 text-xs font-medium bg-primary/10 text-primary rounded-lg border border-primary/30">
+              <div className="flex-1 px-3 py-2 text-xs font-semibold bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 rounded-lg border-2 border-blue-300 shadow-sm">
                 {currentSubStage}
               </div>
 
               {/* Next Stage */}
               {nextStage && (
                 <>
-                  <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
                   <button
                     onClick={e => {
                       e.stopPropagation();
                       updateSubStage(nextStage);
                     }}
-                    className="flex-1 px-3 py-2 text-xs font-medium bg-white text-gray-700 rounded-lg border border-gray-300 hover:border-primary hover:bg-primary/5 hover:text-primary transition-all"
+                    className="flex-1 px-3 py-2 text-xs font-medium bg-white text-gray-600 rounded-lg border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-all"
                   >
                     {nextStage}
                   </button>

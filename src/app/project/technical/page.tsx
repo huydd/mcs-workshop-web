@@ -330,6 +330,16 @@ const TechnicalBomPage = () => {
     return trimmed.length ? trimmed : null;
   };
 
+  // Normalize profile format: H300*200*600*10 or H300X200X600X10 → H300x200x600x10
+  const normalizeProfile = (value: unknown): string | null => {
+    const str = toStringValue(value);
+    if (!str) return null;
+
+    // Replace all * and X (uppercase) with x (lowercase)
+    // Support formats like: H300*200*600*10, H300X200X600X10, H300*200X600*10 (mixed)
+    return str.replace(/[*X]/g, 'x');
+  };
+
   const parseThickness = (value: unknown): number | number[] | string | null => {
     if (value === null || value === undefined || value === '') return null;
     if (typeof value === 'number') return value;
@@ -383,7 +393,7 @@ const TechnicalBomPage = () => {
       assembly_id: toStringValue(lookup(row, 'assembly_id')),
       ass_name: toStringValue(lookup(row, 'ass_name')),
       part_name: toStringValue(lookup(row, 'part_name')),
-      profile: toStringValue(lookup(row, 'profile')),
+      profile: normalizeProfile(lookup(row, 'profile')),
       material: toStringValue(lookup(row, 'material')),
       thickness: parseThickness(lookup(row, 'thickness')),
       width: parseWidth(lookup(row, 'width')),
@@ -413,7 +423,7 @@ const TechnicalBomPage = () => {
       assembly_id: toStringValue(lookup(row, 'assembly_id')),
       ass_name: toStringValue(lookup(row, 'ass_name')),
       part_name: toStringValue(lookup(row, 'part_name')),
-      profile: toStringValue(lookup(row, 'profile')),
+      profile: normalizeProfile(lookup(row, 'profile')),
       material: toStringValue(lookup(row, 'material')),
       thickness: parseThickness(lookup(row, 'thickness')),
       width: parseWidth(lookup(row, 'width')),
