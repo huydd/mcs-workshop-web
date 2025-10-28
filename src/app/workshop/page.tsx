@@ -235,6 +235,30 @@ const WorkshopPage = () => {
         const data = JSON.parse(workshopData);
         // Transform basic tasks to workshop tasks with additional fields
         const workshopTasks: WorkshopTask[] = data.tasks.map((task: any) => {
+          // Load assignments from localStorage for this task
+          const assignmentsKey = `task_assignments_${task.id}`;
+          const assignments = JSON.parse(localStorage.getItem(assignmentsKey) || '[]');
+
+          // Calculate completion for each subtask based on approved assignments
+          const updatedSubtasks = task.subtasks.map((subtask: any, idx: number) => {
+            const subtaskAssignments = assignments.filter((a: any) => a.subtaskIndex === idx);
+            const totalQty = subtask.qty_total || 0;
+
+            // Count approved quantity
+            const approvedQty = subtaskAssignments
+              .filter((a: any) => a.isApproved)
+              .reduce((sum: number, a: any) => sum + a.quantity, 0);
+
+            const completionPercent = totalQty > 0 ? Math.round((approvedQty / totalQty) * 100) : 0;
+            const completedQty = approvedQty;
+
+            return {
+              ...subtask,
+              completionPercent,
+              completedQty,
+            };
+          });
+
           // Generate sample checklist if not exists
           const sampleChecklist =
             task.checklist?.length > 0
@@ -257,6 +281,7 @@ const WorkshopPage = () => {
 
           return {
             ...task,
+            subtasks: updatedSubtasks, // Use updated subtasks with completion data
             startDate: task.startDate || generateSampleStartDate(0),
             endDate: task.endDate || generateSampleEndDate(0),
             assignedWorkers: task.assignedWorkers || [],
@@ -653,7 +678,7 @@ const WorkshopPage = () => {
   const handleTaskChange = (updatedTask: WorkshopTask) => {
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === updatedTask.id ? updatedTask : task
+        task.id === updatedTask.id ? updatedTask : task,
       );
       saveWorkshopData(updatedTasks);
       return updatedTasks;
@@ -821,12 +846,7 @@ const WorkshopPage = () => {
         else if (filterSpeed !== 'all') matchesSpeed = false;
       }
 
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesPriority &&
-        matchesSpeed
-      );
+      return matchesSearch && matchesStatus && matchesPriority && matchesSpeed;
     });
 
     // Sort by priority (urgent > high > medium > low) then by days remaining
@@ -999,7 +1019,6 @@ const WorkshopPage = () => {
             <option value="list">Danh sách</option>
           </select>
         </div>
-
       </Card>
 
       {/* Task Board */}
@@ -1066,6 +1085,8 @@ const WorkshopPage = () => {
           onClose={() => {
             setShowTaskModal(false);
             setTaskModalData(null);
+            // Reload data to reflect assignment changes
+            loadWorkshopData();
           }}
           onSave={updateTask}
         />
@@ -1678,7 +1699,7 @@ const TaskCard = ({
         )}
 
         {/* Progress - Simplified */}
-        <div className="mb-3 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
+        {/* <div className="mb-3 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
           <div className="flex-1">
             <div className="flex items-baseline gap-2 mb-1">
               <span className="text-lg font-bold text-gray-900">{completedQty}</span>
@@ -1715,7 +1736,7 @@ const TaskCard = ({
               {realProgress}%
             </span>
           </div>
-        </div>
+        </div> */}
 
         {/* Zone if assigned */}
         {assignedZone && (
@@ -1766,7 +1787,9 @@ const TaskCard = ({
                             {completedQty}
                           </span>
                           <span className="text-xs text-gray-500">/</span>
-                          <span className="text-xs text-gray-600">{totalQty}</span>
+                          <span className="text-xs text-gray-600">
+                            {totalQty}
+                          </span>
                         </div>
                       </div>
 
@@ -1797,7 +1820,9 @@ const TaskCard = ({
         {/* Stage Progress - Simplified */}
         <div className="pt-3 border-t">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-700">Giai đoạn</span>
+            <span className="text-xs font-semibold text-gray-700">
+              Giai đoạn
+            </span>
             <Button
               variant="ghost"
               size="sm"

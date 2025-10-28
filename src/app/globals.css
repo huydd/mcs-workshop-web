@@ -56,6 +56,20 @@
   animation: slide-up 0.3s ease-out;
 }
 
+/* Shimmer Animation */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
 /* Custom Scrollbar */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;

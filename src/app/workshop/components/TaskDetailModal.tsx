@@ -117,6 +117,9 @@ export const TaskDetailModal = ({
   // Mode selection: null = show options, 'assign' = assignment flow, 'review' = review flow
   const [modalMode, setModalMode] = useState<'assign' | 'review' | null>(null);
 
+  // Force re-render trigger when localStorage changes
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // Stepper state - 4 steps (for assign mode)
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
@@ -127,6 +130,7 @@ export const TaskDetailModal = ({
   const [showAssignedSubtasks, setShowAssignedSubtasks] = useState(true);
   const [showPendingReview, setShowPendingReview] = useState(true);
   const [reassigningSubtask, setReassigningSubtask] = useState<number | null>(null);
+  const [subtaskFilter, setSubtaskFilter] = useState<'all' | 'unassigned' | 'partial' | 'complete'>('all');
   const [reviewingAssignment, setReviewingAssignment] = useState<{
     assignment: FinalAssignment;
     action: 'approve' | 'reject';
@@ -185,18 +189,23 @@ export const TaskDetailModal = ({
   const taskAssName = firstSubtask?.ass_name || 'Không có tên';
   const taskName = `${taskAssName} - ${task.profile}`;
 
-  // Load existing assignments for progress calculation
-  const existingAssignments = JSON.parse(
-    localStorage.getItem(`task_assignments_${task.id}`) || '[]',
-  ) as FinalAssignment[];
+  // Load existing assignments for progress calculation - refreshKey ensures this recalculates
+  const existingAssignments = React.useMemo(() => {
+    return JSON.parse(
+      localStorage.getItem(`task_assignments_${task.id}`) || '[]',
+    ) as FinalAssignment[];
+  }, [task.id, refreshKey]);
 
-  // Calculate progress
+  // Calculate progress - count subtasks that are FULLY APPROVED (not just assigned)
   const totalSubtasks = task.subtasks.length;
   const assignedSubtasks = task.subtasks.filter((subtask, idx) => {
     const assignments = existingAssignments.filter(a => a.subtaskIndex === idx);
     const totalQty = subtask.qty_total || 0;
-    const assignedQty = assignments.reduce((sum, a) => sum + a.quantity, 0);
-    return assignedQty >= totalQty;
+    // Count only approved quantity
+    const approvedQty = assignments
+      .filter(a => a.isApproved)
+      .reduce((sum, a) => sum + a.quantity, 0);
+    return approvedQty >= totalQty; // Subtask is completed when approved qty meets total
   }).length;
 
   // Count pending reviews
@@ -509,15 +518,30 @@ export const TaskDetailModal = ({
       JSON.stringify(updatedAssignments),
     );
 
-    // Close modal and refresh
+    // Close review modal
     setReviewingAssignment(null);
-    // Force re-render by updating a dummy state or reload component
-    window.location.reload(); // Simple approach, can be improved
+
+    // Force re-render
+    setReviewComment('');
+    setReviewImages([]);
+    setRefreshKey(prev => prev + 1);
   };
 
   // Step 1: Select Subtasks - Three Sections
   const renderStep1 = () => {
     const toggleSubtask = (idx: number) => {
+      // Check if this subtask is fully approved - if so, don't allow selection
+      const assignments = existingAssignments.filter(a => a.subtaskIndex === idx);
+      const totalQty = task.subtasks[idx].qty_total || 0;
+      const approvedQty = assignments
+        .filter(a => a.isApproved)
+        .reduce((sum, a) => sum + a.quantity, 0);
+
+      if (approvedQty >= totalQty) {
+        alert('Công việc này đã hoàn thành và được xác nhận. Không thể phân công thêm.');
+        return;
+      }
+
       setSelectedSubtasks(prev =>
         prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx],
       );
@@ -540,13 +564,24 @@ export const TaskDetailModal = ({
       );
       const totalQty = subtask.qty_total || 0;
       const assignedQty = assignments.reduce((sum, a) => sum + a.quantity, 0);
+
+      // Check if all assignments are approved (completed)
+      const approvedQty = assignments
+        .filter(a => a.isApproved)
+        .reduce((sum, a) => sum + a.quantity, 0);
+      const isFullyApproved = approvedQty >= totalQty;
+
+      // Fully assigned = has enough quantity assigned (but may not be approved yet)
       const isFullyAssigned = assignedQty >= totalQty;
 
       return {
         ...subtask,
         index: idx,
         assignedQty,
+        approvedQty,
         isFullyAssigned,
+        isFullyApproved,
+        assignments,
       };
     });
 
@@ -641,13 +676,61 @@ export const TaskDetailModal = ({
         )}
 
 
-        {/* Section 2: All Subtasks with Search */}
+        {/* Section 2: All Subtasks with Search & Filter */}
         <Card padding="lg">
           <div className="mb-4">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-lg font-semibold text-gray-900">
                 Danh sách công việc ({task.subtasks.length})
               </h4>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+              <button
+                onClick={() => setSubtaskFilter('all')}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
+                  subtaskFilter === 'all'
+                    ? 'bg-primary text-white shadow-md'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                Tất cả ({subtasksWithStatus.length})
+              </button>
+              <button
+                onClick={() => setSubtaskFilter('unassigned')}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
+                  subtaskFilter === 'unassigned'
+                    ? 'bg-gray-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                Chưa giao ({subtasksWithStatus.filter(s => s.assignedQty === 0).length})
+              </button>
+              <button
+                onClick={() => setSubtaskFilter('partial')}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
+                  subtaskFilter === 'partial'
+                    ? 'bg-orange-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                Giao 1 phần ({subtasksWithStatus.filter(s => s.assignedQty > 0 && !s.isFullyAssigned).length})
+              </button>
+              <button
+                onClick={() => setSubtaskFilter('complete')}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
+                  subtaskFilter === 'complete'
+                    ? 'bg-green-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                Đã giao đủ ({subtasksWithStatus.filter(s => s.isFullyAssigned).length})
+              </button>
             </div>
 
             {/* Search */}
@@ -664,9 +747,15 @@ export const TaskDetailModal = ({
           </div>
 
           <div className="space-y-1.5 max-h-[45vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-            {/* Show all subtasks filtered by search */}
+            {/* Show all subtasks filtered by search and filter */}
             {subtasksWithStatus
               .filter(s => {
+                // Apply filter
+                if (subtaskFilter === 'unassigned' && s.assignedQty > 0) return false;
+                if (subtaskFilter === 'partial' && (s.assignedQty === 0 || s.isFullyAssigned)) return false;
+                if (subtaskFilter === 'complete' && !s.isFullyAssigned) return false;
+
+                // Apply search
                 if (!searchSubtask) return true;
                 const search = searchSubtask.toLowerCase();
                 return (
@@ -679,21 +768,28 @@ export const TaskDetailModal = ({
                 const totalQty = subtask.qty_total || 0;
                 const remainingQty = totalQty - subtask.assignedQty;
                 const isFullyAssigned = subtask.isFullyAssigned;
+                const isFullyApproved = subtask.isFullyApproved;
 
                 return (
                   <div
                     key={subtask.index}
                     className={cn(
                       'p-2 border rounded-lg transition-all flex items-center gap-2',
-                      isFullyAssigned
-                        ? 'border-green-300 bg-green-50'
-                        : isSelected
-                          ? 'border-primary bg-primary/5'
-                          : 'border-gray-300 hover:border-gray-400 bg-white',
+                      isFullyApproved
+                        ? 'border-emerald-400 bg-emerald-50 cursor-not-allowed opacity-75'
+                        : isFullyAssigned
+                          ? 'border-green-300 bg-green-50'
+                          : isSelected
+                            ? 'border-primary bg-primary/5'
+                            : 'border-gray-300 hover:border-gray-400 bg-white',
                     )}
                   >
-                    {/* Checkbox - only for unassigned/partially assigned */}
-                    {!isFullyAssigned && (
+                    {/* Checkbox or Approved Icon */}
+                    {isFullyApproved ? (
+                      <div className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
+                        <CheckCircle2 className="w-3 h-3 text-white" />
+                      </div>
+                    ) : !isFullyAssigned ? (
                       <div
                         onClick={() => toggleSubtask(subtask.index)}
                         className={cn(
@@ -705,20 +801,27 @@ export const TaskDetailModal = ({
                       >
                         {isSelected && <Check className="w-3 h-3 text-white" />}
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Name - flex-1 to take remaining space */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 text-sm truncate">
+                      <p className={cn(
+                        "font-semibold text-sm truncate",
+                        isFullyApproved ? "text-emerald-900" : "text-gray-900"
+                      )}>
                         {subtask.part_name || `Chi tiết ${subtask.index + 1}`}
                       </p>
                     </div>
 
-                    {/* Status badge */}
+                    {/* Status badge and actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {isFullyAssigned ? (
+                      {isFullyApproved ? (
+                        <Badge className="bg-emerald-600 text-white text-xs">
+                          ✓ Hoàn thành {subtask.approvedQty}/{totalQty}
+                        </Badge>
+                      ) : isFullyAssigned ? (
                         <>
-                          <Badge className="bg-green-600 text-white text-xs">
+                          <Badge className="bg-yellow-600 text-white text-xs">
                             Đã giao {subtask.assignedQty}/{totalQty}
                           </Badge>
                           <Button
@@ -1528,8 +1631,9 @@ export const TaskDetailModal = ({
       JSON.stringify(updatedAssignments),
     );
 
-    // Refresh page to show updated data
-    window.location.reload();
+    // Close reassignment modal and force re-render
+    setReassigningSubtask(null);
+    setRefreshKey(prev => prev + 1);
   };
 
   return (
@@ -1729,28 +1833,66 @@ export const TaskDetailModal = ({
               {/* Content */}
               <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
                 {/* Assignment Info */}
-                <Card padding="md" className="bg-gray-50">
-                  <p className="text-sm text-gray-600 mb-1">Công việc</p>
-                  <p className="font-semibold text-gray-900">
-                    {reviewingAssignment.assignment.subtaskName}
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-                    <div>
-                      <span className="text-gray-600">Người làm:</span>
-                      <br />
-                      <strong>{reviewingAssignment.assignment.workerName}</strong>
+                <Card padding="md" className={cn(
+                  "border-2",
+                  reviewingAssignment.action === 'approve' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                )}>
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      "w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0",
+                      reviewingAssignment.action === 'approve' ? 'bg-green-100' : 'bg-red-100'
+                    )}>
+                      {reviewingAssignment.action === 'approve' ? (
+                        <CheckCircle2 className="w-6 h-6 text-green-600" />
+                      ) : (
+                        <X className="w-6 h-6 text-red-600" />
+                      )}
                     </div>
-                    <div>
-                      <span className="text-gray-600">Số lượng:</span>
-                      <br />
-                      <strong>{reviewingAssignment.assignment.quantity}</strong>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Done lúc:</span>
-                      <br />
-                      <strong>
-                        {new Date(reviewingAssignment.assignment.doneAt!).toLocaleDateString('vi-VN')}
-                      </strong>
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-600 mb-1">Công việc</p>
+                      <p className="font-bold text-gray-900 text-lg mb-3">
+                        {reviewingAssignment.assignment.subtaskName}
+                      </p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-gray-500" />
+                          <div>
+                            <span className="text-gray-600">Người làm:</span>
+                            <br />
+                            <strong className="text-gray-900">{reviewingAssignment.assignment.workerName}</strong>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-gray-500" />
+                          <div>
+                            <span className="text-gray-600">Số lượng:</span>
+                            <br />
+                            <strong className="text-gray-900">{reviewingAssignment.assignment.quantity}</strong>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-500" />
+                          <div>
+                            <span className="text-gray-600">Thời gian:</span>
+                            <br />
+                            <strong className="text-gray-900 text-xs">
+                              {new Date(reviewingAssignment.assignment.startDate).toLocaleDateString('vi-VN')} → {new Date(reviewingAssignment.assignment.endDate).toLocaleDateString('vi-VN')}
+                            </strong>
+                          </div>
+                        </div>
+                        {reviewingAssignment.assignment.isDone && reviewingAssignment.assignment.doneAt && (
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-600" />
+                            <div>
+                              <span className="text-gray-600">Hoàn thành:</span>
+                              <br />
+                              <strong className="text-green-700 text-xs">
+                                {new Date(reviewingAssignment.assignment.doneAt).toLocaleString('vi-VN')}
+                              </strong>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -1776,62 +1918,78 @@ export const TaskDetailModal = ({
                   />
                 </div>
 
-                {/* Image Upload */}
+                {/* Image Upload - Evidence */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Tải ảnh minh chứng (tùy chọn)
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Ảnh minh chứng
+                    <span className="text-gray-500 font-normal">(tùy chọn)</span>
                   </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary/50 transition-colors bg-gray-50">
                     <input
                       type="file"
                       accept="image/*"
                       multiple
                       onChange={e => {
                         const files = Array.from(e.target.files || []);
-                        // Simple base64 conversion for demo - in production use proper upload
                         files.forEach(file => {
+                          if (file.size > 10 * 1024 * 1024) {
+                            alert('Ảnh không được vượt quá 10MB');
+                            return;
+                          }
                           const reader = new FileReader();
                           reader.onloadend = () => {
                             setReviewImages(prev => [...prev, reader.result as string]);
                           };
                           reader.readAsDataURL(file);
                         });
+                        // Reset input
+                        e.target.value = '';
                       }}
                       className="hidden"
                       id="review-image-upload"
                     />
                     <label
                       htmlFor="review-image-upload"
-                      className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                      className="cursor-pointer inline-flex flex-col items-center gap-2"
                     >
-                      <Calendar className="w-4 h-4" />
-                      <span className="text-sm font-medium">Chọn ảnh</span>
+                      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+                        <FileText className="w-8 h-8 text-primary" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">
+                        Nhấn để chọn ảnh
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        PNG, JPG, GIF • Tối đa 10MB mỗi ảnh
+                      </span>
                     </label>
-                    <p className="text-xs text-gray-500 mt-2">
-                      PNG, JPG, GIF up to 10MB
-                    </p>
                   </div>
 
-                  {/* Image Preview */}
+                  {/* Image Preview Grid */}
                   {reviewImages.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2 mt-3">
-                      {reviewImages.map((img, idx) => (
-                        <div key={idx} className="relative">
-                          <img
-                            src={img}
-                            alt={`Review ${idx + 1}`}
-                            className="w-full h-24 object-cover rounded-lg border border-gray-200"
-                          />
-                          <button
-                            onClick={() =>
-                              setReviewImages(prev => prev.filter((_, i) => i !== idx))
-                            }
-                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center hover:bg-red-700"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-600 mb-2 font-medium">
+                        Đã chọn {reviewImages.length} ảnh
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {reviewImages.map((img, idx) => (
+                          <div key={idx} className="relative group">
+                            <img
+                              src={img}
+                              alt={`Evidence ${idx + 1}`}
+                              className="w-full h-24 object-cover rounded-lg border-2 border-gray-200 group-hover:border-primary transition-colors"
+                            />
+                            <button
+                              onClick={() =>
+                                setReviewImages(prev => prev.filter((_, i) => i !== idx))
+                              }
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center hover:bg-red-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1890,6 +2048,42 @@ export const TaskDetailModal = ({
                 {task.profile} {task.material && `| ${task.material}`}
               </p>
             </div>
+
+            {/* Quick mode switch buttons - show when in assign or review mode */}
+            {modalMode && (
+              <div className="flex items-center gap-2 mr-4">
+                <button
+                  onClick={() => setModalMode('assign')}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
+                    modalMode === 'assign'
+                      ? "bg-primary text-white shadow-md"
+                      : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
+                  )}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  Phân công
+                </button>
+                <button
+                  onClick={() => setModalMode('review')}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 relative",
+                    modalMode === 'review'
+                      ? "bg-yellow-600 text-white shadow-md"
+                      : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
+                  )}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Xác nhận
+                  {pendingReviewCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-xs rounded-full flex items-center justify-center">
+                      {pendingReviewCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+
             <button
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1905,24 +2099,50 @@ export const TaskDetailModal = ({
             </div>
           ) : modalMode === 'review' ? (
             <div className="flex-1 overflow-auto px-6 py-6">
-              {/* Review Mode Content - reuse Section 0 from Step 1 */}
+              {/* Review Mode Content - Table View */}
               {(() => {
-                const pendingAssignments = existingAssignments.filter(
+                // Show assignments that are done and pending review
+                const pendingReviewAssignments = existingAssignments.filter(
                   a => a.isDone && !a.isApproved && !a.isRejected,
                 );
 
+                // Show ALL assigned work (including approved, rejected, in-progress)
+                const allAssignments = existingAssignments;
+                const approvedCount = allAssignments.filter(a => a.isApproved).length;
+                const rejectedCount = allAssignments.filter(a => a.isRejected).length;
+                const inProgressCount = allAssignments.filter(a => !a.isDone && !a.isApproved && !a.isRejected).length;
+
                 return (
-                  <div className="space-y-4 max-w-4xl mx-auto">
-                    <div className="text-center mb-6">
+                  <div className="space-y-4">
+                    <div className="text-center mb-4">
                       <h3 className="text-2xl font-semibold text-gray-900 mb-2">
-                        Xác nhận công việc đã hoàn thành
+                        Xác nhận công việc
                       </h3>
-                      <p className="text-gray-600">
-                        {pendingAssignments.length} công việc cần được kiểm tra
-                      </p>
+                      <div className="flex items-center justify-center gap-4 text-sm">
+                        {pendingReviewAssignments.length > 0 && (
+                          <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full font-medium">
+                            ⏳ {pendingReviewAssignments.length} chờ xác nhận
+                          </span>
+                        )}
+                        {inProgressCount > 0 && (
+                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                            🔨 {inProgressCount} đang làm
+                          </span>
+                        )}
+                        {approvedCount > 0 && (
+                          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full font-medium">
+                            ✓ {approvedCount} đã xác nhận
+                          </span>
+                        )}
+                        {rejectedCount > 0 && (
+                          <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full font-medium">
+                            ✗ {rejectedCount} cần sửa
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {pendingAssignments.length === 0 ? (
+                    {allAssignments.length === 0 ? (
                       <Card padding="lg" className="text-center py-12">
                         <CheckCircle2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                         <p className="text-gray-500 text-lg">
@@ -1930,55 +2150,165 @@ export const TaskDetailModal = ({
                         </p>
                       </Card>
                     ) : (
-                      <div className="space-y-3">
-                        {pendingAssignments.map((assignment, aIdx) => {
-                          const subtask = task.subtasks[assignment.subtaskIndex];
-                          const doneDate = new Date(assignment.doneAt!);
+                      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+                        {/* Table */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                                  Công việc
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                                  Người làm
+                                </th>
+                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">
+                                  Số lượng
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                                  Thời gian
+                                </th>
+                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">
+                                  Trạng thái
+                                </th>
+                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">
+                                  Thao tác
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {allAssignments.map((assignment, aIdx) => {
+                                const subtask = task.subtasks[assignment.subtaskIndex];
+                                const startDate = new Date(assignment.startDate);
+                                const endDate = new Date(assignment.endDate);
+                                const isDone = assignment.isDone;
 
-                          return (
-                            <Card key={aIdx} padding="lg" className="border-2 border-yellow-200">
-                              <div className="flex items-start justify-between mb-3">
-                                <div className="flex-1">
-                                  <p className="font-semibold text-gray-900 text-lg">
-                                    {assignment.subtaskName}
-                                  </p>
-                                  <p className="text-sm text-gray-600 mt-1">
-                                    {task.profile} | Số lượng: {assignment.quantity}
-                                  </p>
-                                  <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
-                                    <Users className="w-4 h-4" />
-                                    <span>{assignment.workerName}</span>
-                                    <span>•</span>
-                                    <Calendar className="w-4 h-4" />
-                                    <span>Done: {doneDate.toLocaleString('vi-VN')}</span>
-                                  </div>
-                                </div>
-                                <Badge className="bg-green-600 text-white">
-                                  ✓ Done by {assignment.doneBy}
-                                </Badge>
-                              </div>
+                                const isApproved = assignment.isApproved;
+                                const isRejected = assignment.isRejected;
 
-                              <div className="flex gap-3">
-                                <Button
-                                  size="sm"
-                                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                                  onClick={() => handleReview(assignment, 'approve')}
-                                >
-                                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                                  Xác nhận xong
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                                  onClick={() => handleReview(assignment, 'reject')}
-                                >
-                                  <X className="w-4 h-4 mr-2" />
-                                  Yêu cầu sửa
-                                </Button>
-                              </div>
-                            </Card>
-                          );
-                        })}
+                                return (
+                                  <tr
+                                    key={aIdx}
+                                    className={cn(
+                                      "transition-colors",
+                                      isApproved
+                                        ? "bg-emerald-50/50"
+                                        : isRejected
+                                          ? "bg-red-50/50"
+                                          : isDone
+                                            ? "bg-yellow-50/50 hover:bg-yellow-100/50"
+                                            : "hover:bg-gray-50"
+                                    )}
+                                  >
+                                    {/* Công việc */}
+                                    <td className="px-3 py-2">
+                                      <p className="font-semibold text-gray-900 text-sm">
+                                        {assignment.subtaskName}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-0.5">
+                                        {task.profile}
+                                      </p>
+                                    </td>
+
+                                    {/* Người làm */}
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                          <Users className="w-3.5 h-3.5 text-primary" />
+                                        </div>
+                                        <span className="font-medium text-gray-900 text-sm">
+                                          {assignment.workerName}
+                                        </span>
+                                      </div>
+                                    </td>
+
+                                    {/* Số lượng */}
+                                    <td className="px-3 py-2 text-center">
+                                      <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold text-sm">
+                                        {assignment.quantity}
+                                      </span>
+                                    </td>
+
+                                    {/* Thời gian */}
+                                    <td className="px-3 py-2">
+                                      <div className="text-xs text-gray-600">
+                                        <div className="flex items-center gap-1 mb-0.5">
+                                          <Calendar className="w-3 h-3" />
+                                          <span>{startDate.toLocaleDateString('vi-VN')}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-gray-400">→</span>
+                                          <span>{endDate.toLocaleDateString('vi-VN')}</span>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Trạng thái */}
+                                    <td className="px-3 py-2 text-center">
+                                      {isApproved ? (
+                                        <Badge className="bg-emerald-600 text-white text-xs">
+                                          ✓ Đã xác nhận
+                                        </Badge>
+                                      ) : isRejected ? (
+                                        <div>
+                                          <Badge className="bg-red-600 text-white text-xs mb-1">
+                                            ✗ Cần sửa lại
+                                          </Badge>
+                                          {assignment.reviewComment && (
+                                            <p className="text-xs text-red-700 mt-1 line-clamp-1" title={assignment.reviewComment}>
+                                              "{assignment.reviewComment}"
+                                            </p>
+                                          )}
+                                        </div>
+                                      ) : isDone ? (
+                                        <div>
+                                          <Badge className="bg-yellow-600 text-white text-xs mb-1">
+                                            ⏳ Chờ xác nhận
+                                          </Badge>
+                                          {assignment.doneAt && (
+                                            <p className="text-xs text-gray-500 mt-1">
+                                              {new Date(assignment.doneAt).toLocaleString('vi-VN')}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <Badge className="bg-blue-500 text-white text-xs">
+                                          🔨 Đang làm
+                                        </Badge>
+                                      )}
+                                    </td>
+
+                                    {/* Thao tác */}
+                                    <td className="px-3 py-2">
+                                      {isApproved || isRejected ? (
+                                        <div className="text-center">
+                                          <span className="text-xs text-gray-400">-</span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex gap-1 justify-center">
+                                          <button
+                                            onClick={() => handleReview(assignment, 'approve')}
+                                            className="p-1.5 rounded-lg bg-green-100 hover:bg-green-600 text-green-700 hover:text-white transition-colors"
+                                            title="Xác nhận hoàn thành"
+                                          >
+                                            <CheckCircle2 className="w-4 h-4" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleReview(assignment, 'reject')}
+                                            className="p-1.5 rounded-lg bg-red-100 hover:bg-red-600 text-red-700 hover:text-white transition-colors"
+                                            title="Yêu cầu làm lại"
+                                          >
+                                            <X className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2003,24 +2333,43 @@ export const TaskDetailModal = ({
           )}
 
           {/* Fixed Footer with Progress */}
-          <div className="border-t bg-gray-50 sticky bottom-0 z-10">
+          <div className="border-t bg-white sticky bottom-0 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
             {/* Progress Bar - Always visible */}
-            <div className="px-6 py-3 bg-gradient-to-r from-blue-50 to-primary/5 border-b">
-              <div className="flex items-center justify-between text-sm mb-2">
-                <span className="font-semibold text-gray-700">
-                  Tiến độ phân công
-                </span>
-                <span className="font-bold text-primary text-lg">
-                  {assignedSubtasks}/{totalSubtasks}
-                </span>
+            <div className="px-6 py-3 bg-gradient-to-br from-gray-50 via-white to-primary/5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">
+                    Tiến độ phân công
+                  </span>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-500 mb-0.5">Hoàn thành</div>
+                  <div className="font-bold text-primary text-xl leading-none">
+                    {assignedSubtasks}<span className="text-gray-400 text-sm">/{totalSubtasks}</span>
+                  </div>
+                </div>
               </div>
-              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className="relative w-full h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner">
                 <div
-                  className="h-full bg-gradient-to-r from-primary to-blue-600 transition-all"
+                  className="h-full bg-gradient-to-r from-primary via-blue-500 to-blue-600 transition-all duration-500 ease-out relative"
                   style={{
                     width: `${totalSubtasks > 0 ? (assignedSubtasks / totalSubtasks) * 100 : 0}%`,
                   }}
-                />
+                >
+                  {/* Shine effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                </div>
+                {/* Percentage label inside bar if > 15% */}
+                {totalSubtasks > 0 && (assignedSubtasks / totalSubtasks) * 100 > 15 && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-bold text-white drop-shadow-md">
+                      {Math.round((assignedSubtasks / totalSubtasks) * 100)}%
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
