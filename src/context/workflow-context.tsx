@@ -125,7 +125,10 @@ const rawHeaderFallback: Record<RawBomField, number> = {
 };
 
 const normalizeHeader = (value: string) =>
-  value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
 
 const headerAlias: Record<string, RawBomField> = {
   no: 'index',
@@ -196,7 +199,9 @@ const priorityFromString = (
 
 const toNumber = (value: string): number | null => {
   if (!value) return null;
-  const cleaned = value.replace(/[^0-9.,-]/g, '').replace(/,(?=\d{3}(?:\D|$))/g, '');
+  const cleaned = value
+    .replace(/[^0-9.,-]/g, '')
+    .replace(/,(?=\d{3}(?:\D|$))/g, '');
   const normalized = cleaned.replace(/,/g, '.');
   const numeric = Number(normalized);
   return Number.isFinite(numeric) ? numeric : null;
@@ -238,15 +243,18 @@ const parseBomCsv = (content: string) => {
 
   // Group by (profile + ass_name) combination
   type GroupKey = string;
-  const groups = new Map<GroupKey, {
-    profile: string;
-    ass_name: string;
-    material: string;
-    stage: ProcessStage;
-    quantity: number;
-    totalWeight: number;
-    notes: string[];
-  }>();
+  const groups = new Map<
+    GroupKey,
+    {
+      profile: string;
+      ass_name: string;
+      material: string;
+      stage: ProcessStage;
+      quantity: number;
+      totalWeight: number;
+      notes: string[];
+    }
+  >();
 
   for (let i = 1; i < rows.length; i += 1) {
     const line = rows[i];
@@ -297,26 +305,28 @@ const parseBomCsv = (content: string) => {
   }
 
   // Convert groups to tasks
-  const tasks: BomTask[] = Array.from(groups.entries()).map(([key, group], index) => {
-    // Generate a descriptive name
-    const nameParts = [];
-    if (group.ass_name) nameParts.push(group.ass_name);
-    nameParts.push(group.profile);
-    if (group.material) nameParts.push(`(${group.material})`);
+  const tasks: BomTask[] = Array.from(groups.entries()).map(
+    ([key, group], index) => {
+      // Generate a descriptive name
+      const nameParts = [];
+      if (group.ass_name) nameParts.push(group.ass_name);
+      nameParts.push(group.profile);
+      if (group.material) nameParts.push(`(${group.material})`);
 
-    return {
-      id: `bom-${Date.now()}-${index}`,
-      componentCode: group.profile,
-      name: nameParts.join(' '),
-      stage: group.stage,
-      quantity: group.quantity,
-      totalWeight: group.totalWeight,
-      plannedStart: undefined,
-      plannedEnd: undefined,
-      priority: undefined,
-      notes: group.notes.length > 0 ? group.notes.join('; ') : undefined,
-    };
-  });
+      return {
+        id: `bom-${Date.now()}-${index}`,
+        componentCode: group.profile,
+        name: nameParts.join(' '),
+        stage: group.stage,
+        quantity: group.quantity,
+        totalWeight: group.totalWeight,
+        plannedStart: undefined,
+        plannedEnd: undefined,
+        priority: undefined,
+        notes: group.notes.length > 0 ? group.notes.join('; ') : undefined,
+      };
+    },
+  );
 
   return { tasks, warnings };
 };
@@ -522,6 +532,42 @@ export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
 
       setBomTasks(parsed.tasks);
       setBomImportHistory(prev => [summary, ...prev]);
+
+      // Also save to localStorage for Pull Board compatibility
+      if (typeof window !== 'undefined') {
+        const bomData = {
+          data: parsed.tasks.map(task => ({
+            index: parseInt(task.id.split('-')[1]) || 0,
+            project_id: null,
+            assembly_id: null,
+            ass_name: task.name.split(' ')[0], // Extract assembly name from task name
+            part_name: task.componentCode,
+            profile: task.componentCode,
+            material: null,
+            thickness: null,
+            width: null,
+            length: null,
+            qty_per_ass: null,
+            qty_total: task.quantity,
+            weight_per_part: null,
+            weight_combination: null,
+            weight_per_ass: null,
+            weight_total: task.totalWeight,
+            area_per_ass: null,
+            area_total: null,
+            welding_machine: null,
+            hand_welding: null,
+            note: task.notes,
+            children: [],
+          })),
+          timestamp,
+          fileName: fileName.replace('.csv', ''),
+          totalGroups: parsed.tasks.length,
+          totalChildren: 0,
+          published: true,
+        };
+        localStorage.setItem('bomListData', JSON.stringify(bomData));
+      }
 
       setWorkflow(prev => {
         const stages = prev.stages.map(stage => {
