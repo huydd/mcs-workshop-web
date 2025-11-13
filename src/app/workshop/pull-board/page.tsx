@@ -197,18 +197,15 @@ const PullBoardPage = () => {
 
       // Convert groups to tasks
       // Each group's assemblies array contains the parent nodes (assemblies)
-      // Each parent's children array contains the parts
+      // CHANGED: Now children = assemblies (cấu kiện), not parts (phôi)
       const tasks: AvailableTask[] = Array.from(grouped.entries()).map(([_, group], idx) => {
-        // Flatten all children from all assemblies for backward compatibility
-        const allChildren: BomTreeNode[] = [];
-        group.assemblies.forEach(assembly => {
-          assembly.children.forEach(child => {
-            allChildren.push({
-              ...child,
-              assembly_id: assembly.assembly_id, // Tag each part with its assembly ID
-            });
-          });
-        });
+        // Use assemblies as children instead of flattening to parts
+        // This makes subtasks = assemblies (cấu kiện) instead of parts (phôi)
+        const assembliesAsChildren: BomTreeNode[] = group.assemblies.map(assembly => ({
+          ...assembly,
+          // Keep the assembly with all its parts in children
+          // But we'll use assembly-level data for the subtask display
+        }));
 
         return {
           id: `task-${idx + 1}`,
@@ -218,7 +215,7 @@ const PullBoardPage = () => {
           material: group.material,
           qty_total: group.totalQty,
           weight_total: group.totalWeight,
-          children: allChildren, // All parts from all assemblies
+          children: assembliesAsChildren, // Assemblies (cấu kiện), not parts (phôi)
         };
       });
 
@@ -411,18 +408,19 @@ const PullBoardPage = () => {
         id: task.id,
         profile: task.profile || 'Không có tên', // Use profile, not ass_name
         material: task.material,
-        subtasks: task.children.map((child, idx) => ({
+        subtasks: task.children.map((assembly, idx) => ({
           index: idx,
-          part_name: child.part_name,
-          ass_name: child.ass_name || task.ass_name, // Use child's ass_name or fallback to task's
-          assembly_id: child.assembly_id, // Assembly ID to group parts
-          qty_total: child.qty_total,
-          qty_per_ass: child.qty_per_ass, // Quantity per assembly
-          weight_total: child.weight_total,
-          area_total: child.area_total,
-          welding_machine: child.welding_machine,
-          hand_welding: child.hand_welding,
-          note: child.note,
+          // Now child is an assembly (cấu kiện), not a part (phôi)
+          part_name: assembly.ass_name || assembly.part_name, // Use ass_name as the subtask name
+          ass_name: assembly.ass_name || task.ass_name,
+          assembly_id: assembly.assembly_id,
+          qty_total: assembly.qty_total,
+          qty_per_ass: assembly.qty_per_ass,
+          weight_total: assembly.weight_total,
+          area_total: assembly.area_total,
+          welding_machine: assembly.welding_machine,
+          hand_welding: assembly.hand_welding,
+          note: assembly.note,
           completedQty: 0, // Initialize completed quantity
         })),
         totalQty: task.qty_total,
@@ -603,21 +601,24 @@ const PullBoardPage = () => {
           {hasChildren && expanded && (
             <div className="mt-3 pt-3 border-t space-y-2">
               <div className="text-xs font-medium text-secondary/70 mb-2">
-                Chi tiết ({task.children.length} items):
+                Cấu kiện ({task.children.length}):
               </div>
-              {task.children.map((child, idx) => (
+              {task.children.map((assembly, idx) => (
                 <div
                   key={idx}
                   className="pl-6 py-2 bg-white/50 rounded border border-gray-200 text-xs"
                 >
                   <div className="font-medium text-secondary">
-                    {child.ass_name || child.part_name || 'Chi tiết'}
+                    {assembly.ass_name || assembly.part_name || 'Cấu kiện'}
                   </div>
                   <div className="text-secondary/60 mt-1 space-y-0.5">
-                    <div>Profile: {child.profile || '—'}</div>
-                    {child.qty_total && <div>SL: {child.qty_total}</div>}
-                    {child.weight_per_part && (
-                      <div>KL/CT: {child.weight_per_part.toFixed(2)} kg</div>
+                    {assembly.assembly_id && <div>Mã: {assembly.assembly_id}</div>}
+                    {assembly.qty_total && <div>SL: {assembly.qty_total}</div>}
+                    {assembly.weight_total && (
+                      <div>KL tổng: {assembly.weight_total.toFixed(2)} kg</div>
+                    )}
+                    {assembly.children && assembly.children.length > 0 && (
+                      <div className="text-gray-500 italic">({assembly.children.length} phôi)</div>
                     )}
                   </div>
                 </div>

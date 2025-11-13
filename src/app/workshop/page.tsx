@@ -1779,41 +1779,87 @@ const TaskCard = ({
                   const percent = subtask.completionPercent || 0;
                   const completedQty = Math.round((totalQty * percent) / 100);
 
+                  // Check if subtask has been assigned (has any assignments in localStorage)
+                  const assignmentsKey = `task_assignments_${task.id}`;
+                  const assignments = typeof window !== 'undefined'
+                    ? JSON.parse(localStorage.getItem(assignmentsKey) || '[]')
+                    : [];
+                  const subtaskAssignments = assignments.filter((a: any) => a.subtaskIndex === idx);
+                  const hasAssignment = subtaskAssignments.length > 0;
+
+                  // Calculate days remaining (assuming 7 days from assignment)
+                  const daysRemaining = hasAssignment && subtaskAssignments[0]?.assignedAt
+                    ? Math.ceil((new Date(subtaskAssignments[0].assignedAt).getTime() + 7 * 24 * 60 * 60 * 1000 - Date.now()) / (1000 * 60 * 60 * 24))
+                    : null;
+
                   return (
                     <div
                       key={idx}
-                      className="bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-md p-2.5 hover:border-blue-300 hover:shadow-sm transition-all"
+                      className="bg-white border border-gray-200 rounded-md p-2 hover:border-blue-300 hover:shadow-sm transition-all"
                     >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-semibold text-gray-800 flex-1 truncate">
-                          {subtask.part_name || `Part ${idx + 1}`}
+                      {/* Row 1: Assembly ID/Name */}
+                      <div className="mb-1.5">
+                        <p className="text-xs font-bold text-gray-900 truncate">
+                          {subtask.assembly_id || subtask.part_name || `CK-${idx + 1}`}
                         </p>
-                        <div className="flex items-baseline gap-1 ml-2">
-                          <span className="text-xs font-bold text-gray-900">
-                            {completedQty}
-                          </span>
-                          <span className="text-xs text-gray-400">/</span>
-                          <span className="text-xs text-gray-600">
-                            {totalQty}
-                          </span>
-                        </div>
                       </div>
 
-                      {/* Progress bar */}
-                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            'h-full transition-all rounded-full',
-                            percent === 100
-                              ? 'bg-emerald-500'
-                              : percent >= 75
-                              ? 'bg-blue-500'
-                              : percent >= 50
-                              ? 'bg-amber-500'
-                              : 'bg-orange-500',
+                      {/* Row 2: Info - Days + Progress Circle with Quantity */}
+                      <div className="flex items-center justify-between gap-3">
+                        {/* Days remaining - moved to left */}
+                        <div className="text-[10px] text-gray-500">
+                          {hasAssignment ? (
+                            daysRemaining !== null && daysRemaining >= 0 ? (
+                              <span className="text-emerald-600 font-medium">Còn {daysRemaining} ngày</span>
+                            ) : daysRemaining !== null && daysRemaining < 0 ? (
+                              <span className="text-rose-600 font-medium">Trễ {Math.abs(daysRemaining)} ngày</span>
+                            ) : (
+                              <span>Đã giao</span>
+                            )
+                          ) : (
+                            <span className="italic">Chưa giao việc</span>
                           )}
-                          style={{ width: `${percent}%` }}
-                        />
+                        </div>
+
+                        {/* Circular Progress with Quantity inside - moved to right */}
+                        <div className="relative w-10 h-10 flex-shrink-0 ml-auto">
+                          <svg className="w-10 h-10 transform -rotate-90">
+                            <circle
+                              cx="20"
+                              cy="20"
+                              r="16"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                              fill="none"
+                              className="text-gray-200"
+                            />
+                            <circle
+                              cx="20"
+                              cy="20"
+                              r="16"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                              fill="none"
+                              strokeDasharray={`${2 * Math.PI * 16}`}
+                              strokeDashoffset={`${2 * Math.PI * 16 * (1 - percent / 100)}`}
+                              className={cn(
+                                'transition-all',
+                                percent === 100
+                                  ? 'text-emerald-500'
+                                  : percent >= 75
+                                  ? 'text-blue-500'
+                                  : percent >= 50
+                                  ? 'text-amber-500'
+                                  : 'text-orange-500',
+                              )}
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-[9px] font-bold text-gray-700">
+                              {completedQty}/{totalQty}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );

@@ -39,6 +39,7 @@ interface WorkerAssignment {
   workerId: string;
   subtaskIndex: number;
   quantity: number;
+  hoursPerDay: number; // Số giờ làm mỗi ngày cho assignment này
   startDate?: string;
   endDate?: string;
   isDone?: boolean;
@@ -52,6 +53,7 @@ interface FinalAssignment {
   subtaskIndex: number;
   subtaskName: string;
   quantity: number;
+  hoursPerDay: number; // Số giờ làm mỗi ngày
   startDate: string;
   endDate: string;
   isDone?: boolean;
@@ -63,6 +65,15 @@ interface FinalAssignment {
   reviewImages?: string[];
   reviewedAt?: string;
   reviewedBy?: string;
+}
+
+interface OTRequest {
+  workerId: string;
+  workerName: string;
+  date: string;
+  currentHours: number;
+  requestedHours: number;
+  reason: string;
 }
 
 interface WorkshopTask {
@@ -143,6 +154,16 @@ export const TaskDetailModal = ({
     WorkerAssignment[]
   >([]);
   const [searchWorker, setSearchWorker] = useState('');
+
+  // OT Request Modal
+  const [showOTModal, setShowOTModal] = useState(false);
+  const [otRequestData, setOTRequestData] = useState<{
+    workerId: string;
+    workerName: string;
+    currentHours: number;
+  } | null>(null);
+  const [otHours, setOTHours] = useState<number>(0);
+  const [otReason, setOTReason] = useState<string>('');
   const [hoveredWorker, setHoveredWorker] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
@@ -257,6 +278,7 @@ export const TaskDetailModal = ({
           subtaskIndex: assignment.subtaskIndex,
           subtaskName: subtask.part_name || `Chi tiết ${assignment.subtaskIndex + 1}`,
           quantity: assignment.quantity,
+          hoursPerDay: assignment.hoursPerDay,
           startDate: assignment.startDate!,
           endDate: assignment.endDate!,
           isDone: assignment.isDone,
@@ -865,6 +887,37 @@ export const TaskDetailModal = ({
     );
   };
 
+  // Helper: Calculate total hours assigned for a worker on a specific date
+  const getWorkerHoursOnDate = (workerId: string, date: string): number => {
+    // Get all assignments from localStorage for ALL tasks on this date
+    const allAssignments: FinalAssignment[] = [];
+
+    if (typeof window !== 'undefined') {
+      // Iterate through all localStorage keys to find all task assignments
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('task_assignments_')) {
+          try {
+            const assignments = JSON.parse(localStorage.getItem(key) || '[]');
+            allAssignments.push(...assignments);
+          } catch (e) {
+            console.error(`Error loading ${key}:`, e);
+          }
+        }
+      }
+    }
+
+    return allAssignments
+      .filter(a => {
+        if (a.workerId !== workerId) return false;
+        const assignmentStart = new Date(a.startDate);
+        const assignmentEnd = new Date(a.endDate);
+        const checkDate = new Date(date);
+        return checkDate >= assignmentStart && checkDate <= assignmentEnd;
+      })
+      .reduce((sum, a) => sum + (a.hoursPerDay || 0), 0);
+  };
+
   // Step 2: Assign Workers with Quantities - Table Layout
   const renderStep2 = () => {
     const filteredWorkers = workers.filter(w => {
@@ -893,6 +946,7 @@ export const TaskDetailModal = ({
       workerId: string,
       subtaskIdx: number,
       quantity: number,
+      hoursPerDay: number = 0,
     ) => {
       setWorkerAssignments(prev => {
         const existing = prev.find(
@@ -903,10 +957,10 @@ export const TaskDetailModal = ({
             return prev.filter(a => a !== existing);
           }
           return prev.map(a =>
-            a === existing ? { ...a, quantity } : a,
+            a === existing ? { ...a, quantity, hoursPerDay } : a,
           );
         } else if (quantity > 0) {
-          return [...prev, { workerId, subtaskIndex: subtaskIdx, quantity }];
+          return [...prev, { workerId, subtaskIndex: subtaskIdx, quantity, hoursPerDay }];
         }
         return prev;
       });
@@ -1001,6 +1055,11 @@ export const TaskDetailModal = ({
                     .filter(a => a.workerId === worker.id)
                     .reduce((sum, a) => sum + a.quantity, 0);
 
+                  // Calculate worker's total hours today
+                  const today = new Date().toISOString().split('T')[0];
+                  const totalHoursToday = getWorkerHoursOnDate(worker.id, today);
+                  const isOutOfHours = totalHoursToday >= 8;
+
                   return (
                     <tr
                       key={worker.id}
@@ -1025,10 +1084,45 @@ export const TaskDetailModal = ({
                             <p className="text-xs text-gray-600 truncate">
                               {worker.role}
                             </p>
+
+                            {/* Show total quantity badge */}
                             {workerTotal > 0 && (
                               <Badge className="bg-green-100 text-green-700 text-xs mt-1">
                                 Tổng: {workerTotal}
                               </Badge>
+                            )}
+
+                            {/* Show hours badge */}
+                            {totalHoursToday > 0 && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Badge className={cn(
+                                  "text-xs",
+                                  isOutOfHours
+                                    ? "bg-red-100 text-red-700"
+                                    : totalHoursToday >= 6
+                                    ? "bg-orange-100 text-orange-700"
+                                    : "bg-blue-100 text-blue-700"
+                                )}>
+                                  {totalHoursToday}/8h
+                                </Badge>
+
+                                {/* OT Request Button */}
+                                {isOutOfHours && (
+                                  <button
+                                    onClick={() => {
+                                      setOTRequestData({
+                                        workerId: worker.id,
+                                        workerName: worker.name,
+                                        currentHours: totalHoursToday,
+                                      });
+                                      setShowOTModal(true);
+                                    }}
+                                    className="text-[10px] px-2 py-0.5 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors font-medium"
+                                  >
+                                    Xin OT
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1043,31 +1137,80 @@ export const TaskDetailModal = ({
                             a.subtaskIndex === subtaskIdx,
                         );
                         const currentQty = currentAssignment?.quantity || 0;
+                        const currentHours = currentAssignment?.hoursPerDay || 0;
                         const isColumnFull = remaining === 0 && currentQty === 0;
+
+                        // Calculate available hours
+                        // 1. Hours from localStorage (saved assignments)
+                        const today = new Date().toISOString().split('T')[0];
+                        const savedHours = getWorkerHoursOnDate(worker.id, today);
+
+                        // 2. Hours from current workerAssignments state (not saved yet)
+                        const currentStateHours = workerAssignments
+                          .filter(a => a.workerId === worker.id)
+                          .reduce((sum, a) => sum + (a.hoursPerDay || 0), 0);
+
+                        // Total = saved + current state
+                        const totalAssignedHours = savedHours + currentStateHours;
+                        const availableHours = Math.max(0, 8 - totalAssignedHours);
 
                         return (
                           <td
                             key={subtaskIdx}
                             className="p-3 border-b border-gray-200"
                           >
-                            <input
-                              type="number"
-                              min="0"
-                              max={remaining + currentQty}
-                              value={currentQty || ''}
-                              onChange={e => {
-                                const qty = parseInt(e.target.value) || 0;
-                                updateAssignment(worker.id, subtaskIdx, qty);
-                              }}
-                              placeholder="0"
-                              disabled={isColumnFull}
-                              className={cn(
-                                "w-full px-3 py-2 text-sm border-2 rounded-lg",
-                                isColumnFull
-                                  ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400"
-                                  : "border-gray-300 focus:ring-2 focus:ring-primary focus:border-primary"
-                              )}
-                            />
+                            <div className="space-y-2">
+                              {/* Quantity Input */}
+                              <input
+                                type="number"
+                                min="0"
+                                max={remaining + currentQty}
+                                value={currentQty || ''}
+                                onChange={e => {
+                                  const qty = parseInt(e.target.value) || 0;
+                                  updateAssignment(worker.id, subtaskIdx, qty, currentHours);
+                                }}
+                                placeholder="SL: 0"
+                                disabled={isColumnFull}
+                                className={cn(
+                                  "w-full px-2 py-1.5 text-xs border-2 rounded-md",
+                                  isColumnFull
+                                    ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400"
+                                    : "border-gray-300 focus:ring-2 focus:ring-primary focus:border-primary"
+                                )}
+                              />
+
+                              {/* Hours Input */}
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={8}
+                                  step="0.5"
+                                  value={currentHours || ''}
+                                  onChange={e => {
+                                    const hours = parseFloat(e.target.value) || 0;
+                                    updateAssignment(worker.id, subtaskIdx, currentQty, hours);
+                                  }}
+                                  placeholder="Giờ: 0"
+                                  disabled={isColumnFull}
+                                  className={cn(
+                                    "w-full px-2 py-1.5 text-xs border-2 rounded-md",
+                                    isColumnFull
+                                      ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400"
+                                      : "border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  )}
+                                />
+                                {currentQty > 0 && (
+                                  <div className="text-[10px] text-gray-500 mt-0.5">
+                                    Còn: <span className={cn(
+                                      "font-semibold",
+                                      availableHours <= 0 ? "text-red-600" : "text-green-600"
+                                    )}>{availableHours}h</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </td>
                         );
                       })}
@@ -2423,6 +2566,140 @@ export const TaskDetailModal = ({
           </div>
         </div>
       </div>
+
+      {/* OT Request Modal */}
+      {showOTModal && otRequestData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">
+                Đề xuất làm thêm giờ (OT)
+              </h3>
+              <button
+                onClick={() => {
+                  setShowOTModal(false);
+                  setOTRequestData(null);
+                  setOTHours(0);
+                  setOTReason('');
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-4 space-y-4">
+              {/* Worker Info */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-gray-700">
+                  <strong>Nhân viên:</strong> {otRequestData.workerName}
+                </p>
+                <p className="text-sm text-gray-700 mt-1">
+                  <strong>Giờ đã assign:</strong>{' '}
+                  <span className="text-red-600 font-semibold">
+                    {otRequestData.currentHours}/8 giờ
+                  </span>
+                </p>
+              </div>
+
+              {/* OT Hours Input */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Số giờ OT cần xin <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="0.5"
+                  max="4"
+                  step="0.5"
+                  value={otHours || ''}
+                  onChange={e => setOTHours(parseFloat(e.target.value) || 0)}
+                  placeholder="Ví dụ: 2"
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Tối đa 4 giờ/ngày. Tổng giờ làm việc:{' '}
+                  <strong>{otRequestData.currentHours + otHours} giờ</strong>
+                </p>
+              </div>
+
+              {/* Reason Input */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Lý do <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={otReason}
+                  onChange={e => setOTReason(e.target.value)}
+                  placeholder="Nhập lý do cần làm thêm giờ..."
+                  rows={3}
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowOTModal(false);
+                  setOTRequestData(null);
+                  setOTHours(0);
+                  setOTReason('');
+                }}
+              >
+                Hủy
+              </Button>
+              <Button
+                onClick={() => {
+                  if (otHours <= 0) {
+                    alert('Vui lòng nhập số giờ OT');
+                    return;
+                  }
+                  if (!otReason.trim()) {
+                    alert('Vui lòng nhập lý do');
+                    return;
+                  }
+
+                  // Save OT request to localStorage
+                  const otRequest: OTRequest = {
+                    workerId: otRequestData.workerId,
+                    workerName: otRequestData.workerName,
+                    date: new Date().toISOString().split('T')[0],
+                    currentHours: otRequestData.currentHours,
+                    requestedHours: otHours,
+                    reason: otReason,
+                  };
+
+                  // Save to localStorage
+                  const storageKey = 'ot_requests';
+                  const existingRequests = JSON.parse(
+                    localStorage.getItem(storageKey) || '[]',
+                  );
+                  existingRequests.push(otRequest);
+                  localStorage.setItem(storageKey, JSON.stringify(existingRequests));
+
+                  alert(
+                    `Đã gửi đề xuất OT ${otHours} giờ cho ${otRequestData.workerName}`,
+                  );
+
+                  // Close modal
+                  setShowOTModal(false);
+                  setOTRequestData(null);
+                  setOTHours(0);
+                  setOTReason('');
+                }}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                Gửi đề xuất
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
