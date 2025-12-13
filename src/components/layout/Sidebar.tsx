@@ -37,6 +37,8 @@ const navigationItems = [
     subItems: [
       { name: 'Nhận công việc', href: '/workshop/pull-board' },
       { name: 'Bảng kiểm soát', href: '/workshop' },
+      { name: 'Bảng công tháng', href: '/workshop/timesheet' },
+      { name: 'Quản lý OT', href: '/workshop/ot-management' },
     ],
   },
   {

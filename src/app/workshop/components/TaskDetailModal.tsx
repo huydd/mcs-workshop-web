@@ -16,6 +16,7 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -1032,17 +1033,41 @@ export const TaskDetailModal = ({
           a => a.workerId === workerId && a.subtaskIndex === subtaskIdx,
         );
 
+        // Calculate dates: start = today, end = today + (hoursPerDay / 8) days
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const startDate = today.toISOString();
+
+        const daysNeeded = hoursPerDay > 0 ? Math.ceil(hoursPerDay / 8) : 1;
+        const endDate = new Date(today);
+        endDate.setDate(today.getDate() + daysNeeded - 1);
+
         if (existing) {
           if (quantity <= 0) {
             return prev.filter(a => a !== existing);
           }
           return prev.map(a =>
-            a === existing ? { ...a, quantity, hoursPerDay } : a,
+            a === existing
+              ? {
+                  ...a,
+                  quantity,
+                  hoursPerDay,
+                  startDate: startDate,
+                  endDate: endDate.toISOString(),
+                }
+              : a,
           );
         } else if (quantity > 0) {
           return [
             ...prev,
-            { workerId, subtaskIndex: subtaskIdx, quantity, hoursPerDay },
+            {
+              workerId,
+              subtaskIndex: subtaskIdx,
+              quantity,
+              hoursPerDay,
+              startDate: startDate,
+              endDate: endDate.toISOString(),
+            },
           ];
         }
         return prev;
@@ -1266,11 +1291,11 @@ export const TaskDetailModal = ({
                                       : 'bg-green-100 text-green-700',
                                   )}
                                 >
-                                  {workerWeeklyHours.toFixed(1)}/40h
+                                  {workerWeeklyHours.toFixed(0)} giờ
                                 </Badge>
 
                                 {/* OT Button - Only show when >= 40 hours */}
-                                {needsOT && (
+                                {/* {needsOT && (
                                   <button
                                     onClick={() => {
                                       setOTRequestData({
@@ -1284,7 +1309,7 @@ export const TaskDetailModal = ({
                                   >
                                     Xin OT
                                   </button>
-                                )}
+                                )} */}
                               </div>
 
                               {isOverHours && (
@@ -1375,21 +1400,13 @@ export const TaskDetailModal = ({
 
                               {/* Hours Display */}
                               {currentQty > 0 && (
-                                <div className="space-y-1">
-                                  <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1">
-                                    <p className="text-xs text-blue-700 font-semibold">
-                                      {currentHours}h
-                                    </p>
-                                    <p className="text-[10px] text-blue-600">
-                                      / {currentQty} SL
-                                    </p>
-                                  </div>
-
-                                  {remaining > 0 && (
-                                    <p className="text-xs text-orange-600">
-                                      Cần {remaining} SL
-                                    </p>
-                                  )}
+                                <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                                  <p className="text-xs text-blue-700 font-semibold">
+                                    {currentHours}h
+                                  </p>
+                                  <p className="text-[10px] text-blue-600">
+                                    / {currentQty} SL
+                                  </p>
                                 </div>
                               )}
                             </div>
@@ -1450,6 +1467,41 @@ export const TaskDetailModal = ({
 
   // Step 3: Select Date Range for Each Assignment - Compact Table
   const renderStep3 = () => {
+    // Calculate end date based on total hours and 8 hours per day
+    const calculateEndDate = (
+      startDate: string,
+      totalHours: number,
+    ): string => {
+      const start = new Date(startDate);
+      const daysNeeded = Math.ceil(totalHours / 8);
+      const end = new Date(start);
+      end.setDate(start.getDate() + daysNeeded - 1);
+      return end.toISOString();
+    };
+
+    // Check if worker has conflicting assignments in the same date range
+    const checkDateConflict = (
+      workerId: string,
+      currentSubtaskIdx: number,
+      startDate: string,
+      endDate: string,
+    ): WorkerAssignment[] => {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      return workerAssignments.filter(a => {
+        if (a.workerId !== workerId || a.subtaskIndex === currentSubtaskIdx)
+          return false;
+        if (!a.startDate || !a.endDate) return false;
+
+        const aStart = new Date(a.startDate);
+        const aEnd = new Date(a.endDate);
+
+        // Check if date ranges overlap
+        return aStart <= end && aEnd >= start;
+      });
+    };
+
     const updateAssignmentDates = (
       workerId: string,
       subtaskIdx: number,
@@ -1518,6 +1570,9 @@ export const TaskDetailModal = ({
                   <th className="p-3 text-center text-xs font-semibold text-gray-700 border-b-2 border-gray-300">
                     Số ngày
                   </th>
+                  <th className="p-3 text-left text-xs font-semibold text-gray-700 border-b-2 border-gray-300 min-w-[150px]">
+                    Cảnh báo
+                  </th>
                   <th className="p-3 text-center text-xs font-semibold text-gray-700 border-b-2 border-gray-300">
                     Trạng thái
                   </th>
@@ -1538,12 +1593,25 @@ export const TaskDetailModal = ({
                         ) + 1
                       : 1;
 
+                  // Check for date conflicts
+                  const conflicts =
+                    assignment.startDate && assignment.endDate
+                      ? checkDateConflict(
+                          assignment.workerId,
+                          assignment.subtaskIndex,
+                          assignment.startDate,
+                          assignment.endDate,
+                        )
+                      : [];
+                  const hasConflict = conflicts.length > 0;
+
                   return (
                     <tr
                       key={idx}
                       className={cn(
                         'hover:bg-gray-50 transition-colors border-b border-gray-200',
                         assignment.isDone && 'bg-green-50/50',
+                        hasConflict && 'bg-orange-50/50',
                       )}
                     >
                       <td className="p-3">
@@ -1624,8 +1692,46 @@ export const TaskDetailModal = ({
                       </td>
                       <td className="p-3 text-center">
                         <Badge className="bg-blue-100 text-blue-700 text-xs">
-                          {daysCount} ngày
+                          {daysCount}
                         </Badge>
+                      </td>
+                      <td className="p-3">
+                        {hasConflict ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-orange-700">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span className="text-xs font-semibold">
+                                Trùng lịch với {conflicts.length} việc khác
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const conflictDetails = conflicts
+                                  .map(c => {
+                                    const cSubtask =
+                                      task.subtasks[c.subtaskIndex];
+                                    return `- ${
+                                      cSubtask.part_name ||
+                                      `CV ${c.subtaskIndex + 1}`
+                                    }`;
+                                  })
+                                  .join('\n');
+                                if (
+                                  window.confirm(
+                                    `Nhân viên ${worker?.name} đang có việc trùng lịch:\n${conflictDetails}\n\nBạn có muốn tiếp tục (làm song song)?`,
+                                  )
+                                ) {
+                                  // User confirmed to work in parallel - no action needed
+                                }
+                              }}
+                              className="text-[10px] px-2 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+                            >
+                              Xem chi tiết
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="p-3 text-center">
                         <button
