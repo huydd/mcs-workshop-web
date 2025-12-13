@@ -36,7 +36,7 @@ interface BomTreeNode {
   profile: string | null;
   material: string | null;
   thickness: number | number[] | string | null;
-  width: number | string | null;  // Can be number (90) or string like "(Kg/m)"
+  width: number | string | null; // Can be number (90) or string like "(Kg/m)"
   length: number | null;
   qty_per_ass: number | null;
   qty_total: number | null;
@@ -51,7 +51,6 @@ interface BomTreeNode {
   note: string | null;
   children: BomTreeNode[];
 }
-
 
 const CSV_HEADERS = [
   'component_code',
@@ -107,27 +106,27 @@ type RawHeaderKey = (typeof RAW_HEADER_KEYS)[number];
 type HeaderLookup = (row: any[], key: RawHeaderKey) => any;
 
 const fallbackColumnIndex: Record<RawHeaderKey, number> = {
-  index: 0,                    // NO
-  project_id: 1,               // Dự án_ID (Project_ID)
-  assembly_id: 2,              // Cấu kiện (Assembly_ID)
-  ass_name: 3,                 // Tên ck (Ass name)
-  part_name: 4,                // Tên chi tiết (Part name)
-  profile: 5,                  // Tiết diện (Profile)
-  material: 6,                 // Vật liệu (Material)
-  thickness: 7,                // Dày (Thick) (mm)
-  width: 8,                    // Rộng (Width) (mm)
-  length: 9,                   // Dài (Length) (mm)
-  qty_per_ass: 10,             // SL/1CK (Qty/Ass)
-  qty_total: 11,               // SL tổng (QtyTotal)
-  weight_per_part: 12,         // KL CT (Weight 1 Part) (kg)
-  weight_combination: 13,      // KL/1CK tổ hợp (Weight 1 combination Ass) (kg)
-  weight_per_ass: 15,          // KL/1CK (Weight 1 Ass) (kg) - NOTE: Column 15, not 14!
-  weight_total: 16,            // KL tổng (Weight Total) (kg)
-  area_per_ass: 17,            // Area 1 Ass (m2)
-  area_total: 18,              // Area Total (m2)
-  welding_machine: 19,         // welding machine (mh)
-  hand_welding: 20,            // hand welding (mh)
-  note: 21,                    // Note
+  index: 0, // NO
+  project_id: 1, // Dự án_ID (Project_ID)
+  assembly_id: 2, // Cấu kiện (Assembly_ID)
+  ass_name: 3, // Tên ck (Ass name)
+  part_name: 4, // Tên chi tiết (Part name)
+  profile: 5, // Tiết diện (Profile)
+  material: 6, // Vật liệu (Material)
+  thickness: 7, // Dày (Thick) (mm)
+  width: 8, // Rộng (Width) (mm)
+  length: 9, // Dài (Length) (mm)
+  qty_per_ass: 10, // SL/1CK (Qty/Ass)
+  qty_total: 11, // SL tổng (QtyTotal)
+  weight_per_part: 12, // KL CT (Weight 1 Part) (kg)
+  weight_combination: 13, // KL/1CK tổ hợp (Weight 1 combination Ass) (kg)
+  weight_per_ass: 15, // KL/1CK (Weight 1 Ass) (kg) - NOTE: Column 15, not 14!
+  weight_total: 16, // KL tổng (Weight Total) (kg)
+  area_per_ass: 17, // Area 1 Ass (m2)
+  area_total: 18, // Area Total (m2)
+  welding_machine: 19, // welding machine (mh)
+  hand_welding: 20, // hand welding (mh)
+  note: 21, // Note
 };
 
 const normalizeHeaderKey = (value: unknown): RawHeaderKey | undefined => {
@@ -273,16 +272,20 @@ const TechnicalBomPage = () => {
     show: boolean;
     message: string;
   }>({ show: false, message: '' });
-  const [approvalStatus, setApprovalStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<
+    'pending' | 'approved' | 'rejected' | null
+  >(null);
   const [collapseBomTable, setCollapseBomTable] = useState(false);
 
   const canUpload = user?.role === UserRole.TECHNICAL_ENGINEER;
   const canReview = user?.role === UserRole.PRODUCTION_PLANNER;
   const BOM_STORAGE_KEY = 'bomListData';
 
-  // Check for existing BOM data on page load
+  // Check for existing BOM data on page load or load default
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    const loadInitialData = async () => {
+      if (typeof window === 'undefined') return;
+
       try {
         const savedData = localStorage.getItem(BOM_STORAGE_KEY);
         const savedApprovalStatus = localStorage.getItem('bomApprovalStatus');
@@ -294,23 +297,46 @@ const TechnicalBomPage = () => {
             setFileMeta({ name: bomData.fileName || 'Loaded from storage' });
             setIsSaved(true);
             setStatus({
-              message: `Loaded ${bomData.totalGroups} groups from previous session.`,
-              type: 'success'
+              message: `Đã tải ${bomData.totalGroups} nhóm từ phiên làm việc trước.`,
+              type: 'success',
             });
 
-            // Load approval status for Mr. Gioi
             if (savedApprovalStatus) {
               setApprovalStatus(savedApprovalStatus as 'approved' | 'rejected');
             }
+            return;
           }
         }
+
+        // Only auto-load default BOM for Technical user if no saved data
+        if (user?.role === UserRole.TECHNICAL_ENGINEER) {
+          await loadDefaultBom();
+        }
       } catch (error) {
-        console.error('Error loading BOM data from localStorage:', error);
-        // If data is corrupted, clear it
+        console.error('Error loading BOM data:', error);
         localStorage.removeItem(BOM_STORAGE_KEY);
       }
+    };
+
+    loadInitialData();
+  }, [user]);
+
+  const loadDefaultBom = async () => {
+    setStatus({ message: 'Đang tải BOM mặc định...', type: 'info' });
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/bom_list.csv');
+      if (!response.ok) throw new Error('Failed to fetch default BOM');
+      const text = await response.text();
+      const file = new File([text], 'bom_list.csv', { type: 'text/csv' });
+      await handleFileChange(file);
+    } catch (error) {
+      console.error('Error loading default BOM:', error);
+      setStatus({ message: 'Không thể tải BOM mặc định.', type: 'error' });
+    } finally {
+      setIsProcessing(false);
     }
-  }, []);
+  };
 
   const toNumber = (value: unknown): number | null => {
     if (value === null || value === undefined || value === '') return null;
@@ -340,7 +366,9 @@ const TechnicalBomPage = () => {
     return str.replace(/[*X]/g, 'x');
   };
 
-  const parseThickness = (value: unknown): number | number[] | string | null => {
+  const parseThickness = (
+    value: unknown,
+  ): number | number[] | string | null => {
     if (value === null || value === undefined || value === '') return null;
     if (typeof value === 'number') return value;
     const strValue = value.toString().trim();
@@ -836,7 +864,10 @@ const TechnicalBomPage = () => {
           timestamp: new Date().toISOString(),
           fileName: fileMeta?.name || 'unknown',
           totalGroups: structuredData.length,
-          totalChildren: structuredData.reduce((acc, parent) => acc + parent.children.length, 0),
+          totalChildren: structuredData.reduce(
+            (acc, parent) => acc + parent.children.length,
+            0,
+          ),
           published: true,
         };
 
@@ -845,13 +876,13 @@ const TechnicalBomPage = () => {
 
         setStatus({
           message: `BOM đã được lưu và publish! Xưởng trưởng có thể vào Pull Board để kéo việc.`,
-          type: 'success'
+          type: 'success',
         });
       }
     } catch (error) {
       setStatus({
         message: 'Failed to save BOM data.',
-        type: 'error'
+        type: 'error',
       });
     }
   };
@@ -951,7 +982,8 @@ const TechnicalBomPage = () => {
                   Hiện tại không có BOM List nào từ phòng kỹ thuật cần xem xét.
                 </p>
                 <p className="text-xs text-secondary/50 mt-4">
-                  Hệ thống sẽ tự động hiển thị BOM List khi phòng kỹ thuật upload và lưu dữ liệu.
+                  Hệ thống sẽ tự động hiển thị BOM List khi phòng kỹ thuật
+                  upload và lưu dữ liệu.
                 </p>
               </div>
             </div>
@@ -997,8 +1029,9 @@ const TechnicalBomPage = () => {
               </div>
               {!canUpload && (
                 <p className="text-xs text-secondary/60 mt-4">
-                  Tài khoản "{user?.name}" ({user ? getRoleLabel(user.role) : '—'}
-                  ) không có quyền chỉnh sửa BOM.
+                  Tài khoản "{user?.name}" (
+                  {user ? getRoleLabel(user.role) : '—'}) không có quyền chỉnh
+                  sửa BOM.
                 </p>
               )}
             </div>
@@ -1045,14 +1078,22 @@ const TechnicalBomPage = () => {
                     disabled={approvalStatus === 'rejected'}
                   >
                     <X className="h-4 w-4" />
-                    <span>{approvalStatus === 'rejected' ? 'Đã từ chối' : 'Từ chối BOM'}</span>
+                    <span>
+                      {approvalStatus === 'rejected'
+                        ? 'Đã từ chối'
+                        : 'Từ chối BOM'}
+                    </span>
                   </Button>
                   <Button
                     onClick={handleApproveBom}
                     disabled={approvalStatus === 'approved'}
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    <span>{approvalStatus === 'approved' ? 'Đã phê duyệt' : 'Phê duyệt BOM'}</span>
+                    <span>
+                      {approvalStatus === 'approved'
+                        ? 'Đã phê duyệt'
+                        : 'Phê duyệt BOM'}
+                    </span>
                   </Button>
                 </>
               ) : (
@@ -1065,12 +1106,24 @@ const TechnicalBomPage = () => {
                       setStatus(null);
                       setWarnings([]);
                       setFileMeta(null);
+                      localStorage.removeItem(BOM_STORAGE_KEY);
                     }}
                   >
                     <RefreshCw className="h-4 w-4" />
-                    <span>Đặt lại</span>
+                    <span>Xóa dữ liệu</span>
                   </Button>
-                  <Button onClick={applyToSystem} disabled={!structuredData.length}>
+                  <Button
+                    variant="secondary"
+                    onClick={loadDefaultBom}
+                    className="border-primary/20 text-primary hover:bg-primary/5"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Tải lại mặc định</span>
+                  </Button>
+                  <Button
+                    onClick={applyToSystem}
+                    disabled={!structuredData.length}
+                  >
                     <UploadCloud className="h-4 w-4" />
                     <span>Áp dụng BOM</span>
                   </Button>
@@ -1154,14 +1207,20 @@ const TechnicalBomPage = () => {
       {structuredData.length > 0 && (
         <Card className="space-y-4" padding="lg">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-secondary">Chi tiết BOM List</h3>
+            <h3 className="text-lg font-semibold text-secondary">
+              Chi tiết BOM List
+            </h3>
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setCollapseBomTable(!collapseBomTable)}
               className="flex items-center gap-2"
             >
-              {collapseBomTable ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {collapseBomTable ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
               {collapseBomTable ? 'Hiển thị' : 'Thu gọn'}
             </Button>
           </div>
@@ -1170,118 +1229,118 @@ const TechnicalBomPage = () => {
             <>
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
                 <div className="flex items-center gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Tìm kiếm theo tên, mã, profile..."
-                  value={filters.searchTerm}
-                  onChange={e =>
-                    setFilters(prev => ({
-                      ...prev,
-                      searchTerm: e.target.value,
-                    }))
-                  }
-                  className="pl-10 w-80"
-                />
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Tìm kiếm theo tên, mã, profile..."
+                      value={filters.searchTerm}
+                      onChange={e =>
+                        setFilters(prev => ({
+                          ...prev,
+                          searchTerm: e.target.value,
+                        }))
+                      }
+                      className="pl-10 w-80"
+                    />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className="flex items-center gap-2"
+                  >
+                    <Filter className="h-4 w-4" />
+                    Lọc nâng cao
+                  </Button>
+                  {(filters.materialFilter ||
+                    filters.profileFilter ||
+                    filters.assemblyFilter) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilters}
+                      className="flex items-center gap-2"
+                    >
+                      <X className="h-4 w-4" />
+                      Xóa bộ lọc
+                    </Button>
+                  )}
+                </div>
+                <div className="text-sm text-gray-600">
+                  Hiển thị {filteredData.length} / {structuredData.length} nhóm
+                </div>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-2"
-              >
-                <Filter className="h-4 w-4" />
-                Lọc nâng cao
-              </Button>
-              {(filters.materialFilter ||
-                filters.profileFilter ||
-                filters.assemblyFilter) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="flex items-center gap-2"
-                >
-                  <X className="h-4 w-4" />
-                  Xóa bộ lọc
-                </Button>
-              )}
-            </div>
-            <div className="text-sm text-gray-600">
-              Hiển thị {filteredData.length} / {structuredData.length} nhóm
-            </div>
-          </div>
 
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vật liệu (nhóm chính)
-                </label>
-                <select
-                  value={filters.materialFilter}
-                  onChange={e =>
-                    setFilters(prev => ({
-                      ...prev,
-                      materialFilter: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                >
-                  <option value="">Tất cả vật liệu</option>
-                  {uniqueMaterials.map(material => (
-                    <option key={material} value={material}>
-                      {material}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Profile (nhóm chính)
-                </label>
-                <select
-                  value={filters.profileFilter}
-                  onChange={e =>
-                    setFilters(prev => ({
-                      ...prev,
-                      profileFilter: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                >
-                  <option value="">Tất cả quy cách</option>
-                  {uniqueProfiles.map(profile => (
-                    <option key={profile} value={profile}>
-                      {profile}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cấu kiện (nhóm chính)
-                </label>
-                <select
-                  value={filters.assemblyFilter}
-                  onChange={e =>
-                    setFilters(prev => ({
-                      ...prev,
-                      assemblyFilter: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                >
-                  <option value="">Tất cả cấu kiện</option>
-                  {uniqueAssemblies.map(assembly => (
-                    <option key={assembly} value={assembly}>
-                      {assembly}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
+              {showFilters && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Vật liệu (nhóm chính)
+                    </label>
+                    <select
+                      value={filters.materialFilter}
+                      onChange={e =>
+                        setFilters(prev => ({
+                          ...prev,
+                          materialFilter: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    >
+                      <option value="">Tất cả vật liệu</option>
+                      {uniqueMaterials.map(material => (
+                        <option key={material} value={material}>
+                          {material}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Profile (nhóm chính)
+                    </label>
+                    <select
+                      value={filters.profileFilter}
+                      onChange={e =>
+                        setFilters(prev => ({
+                          ...prev,
+                          profileFilter: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    >
+                      <option value="">Tất cả quy cách</option>
+                      {uniqueProfiles.map(profile => (
+                        <option key={profile} value={profile}>
+                          {profile}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Cấu kiện (nhóm chính)
+                    </label>
+                    <select
+                      value={filters.assemblyFilter}
+                      onChange={e =>
+                        setFilters(prev => ({
+                          ...prev,
+                          assemblyFilter: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    >
+                      <option value="">Tất cả cấu kiện</option>
+                      {uniqueAssemblies.map(assembly => (
+                        <option key={assembly} value={assembly}>
+                          {assembly}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <BomTable data={filteredData} />
             </>
@@ -1337,8 +1396,6 @@ const TechnicalBomPage = () => {
           </pre>
         </Card>
       )}
-
-
     </div>
   );
 };
@@ -1367,42 +1424,169 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
     return String(value);
   };
 
-  const tableHeaders = [
-    'NO',
-    'Dự án_ID',
-    'Cấu kiện',
-    'Tên ck',
-    'Tên chi tiết',
-    'Tiết diện',
-    'Vật liệu',
-    'Dày',
-    'Rộng',
-    'Dài',
-    'SL/CK',
-    'SL tổng',
-    'KL_CT',
-    'KL/CK tổ hợp',
-    'KL/CK',
-    'KL tổng',
-    'Area 1 Ass',
-    'Area Total',
-    'welding machine',
-    'hand welding',
-    'Note',
+  const columns = [
+    {
+      header: 'NO',
+      width: 'w-12',
+      align: 'text-center',
+      render: (item: any) => item.index,
+    },
+    {
+      header: 'Dự án_ID',
+      width: 'min-w-[100px]',
+      align: 'text-left',
+      field: 'project_id',
+    },
+    {
+      header: 'Cấu kiện',
+      width: 'min-w-[120px]',
+      align: 'text-left font-medium',
+      field: 'assembly_id',
+    },
+    {
+      header: 'Tên CK (Ass name)',
+      width: 'min-w-[150px]',
+      align: 'text-left',
+      field: 'ass_name',
+    },
+    {
+      header: 'Tên chi tiết (Part)',
+      width: 'min-w-[150px]',
+      align: 'text-left',
+      field: 'part_name',
+    },
+    {
+      header: 'Tiết diện',
+      width: 'min-w-[100px]',
+      align: 'text-left',
+      field: 'profile',
+    },
+    {
+      header: 'Vật liệu',
+      width: 'min-w-[80px]',
+      align: 'text-center',
+      field: 'material',
+    },
+    {
+      header: 'Dày',
+      width: 'min-w-[60px]',
+      align: 'text-right font-mono text-gray-600',
+      field: 'thickness',
+    },
+    {
+      header: 'Rộng',
+      width: 'min-w-[60px]',
+      align: 'text-right font-mono text-gray-600',
+      field: 'width',
+    },
+    {
+      header: 'Dài',
+      width: 'min-w-[60px]',
+      align: 'text-right font-mono text-gray-600',
+      field: 'length',
+    },
+    {
+      header: 'SL/CK',
+      width: 'min-w-[60px]',
+      align: 'text-right font-mono font-medium',
+      field: 'qty_per_ass',
+    },
+    {
+      header: 'SL tổng',
+      width: 'min-w-[60px]',
+      align: 'text-right font-mono font-medium',
+      field: 'qty_total',
+    },
+    {
+      header: 'KL_CT',
+      width: 'min-w-[80px]',
+      align: 'text-right font-mono text-gray-600',
+      field: 'weight_per_part',
+    },
+    {
+      header: 'KL/CK tổ hợp',
+      width: 'min-w-[90px]',
+      align: 'text-right font-mono',
+      field: 'weight_combination',
+    },
+    {
+      header: 'KL/CK',
+      width: 'min-w-[80px]',
+      align: 'text-right font-mono',
+      field: 'weight_per_ass',
+    },
+    {
+      header: 'KL tổng',
+      width: 'min-w-[90px]',
+      align: 'text-right font-mono font-bold text-blue-700',
+      field: 'weight_total',
+    },
+    {
+      header: 'Area 1 Ass',
+      width: 'min-w-[80px]',
+      align: 'text-right font-mono',
+      field: 'area_per_ass',
+    },
+    {
+      header: 'Area Total',
+      width: 'min-w-[80px]',
+      align: 'text-right font-mono',
+      field: 'area_total',
+    },
+    {
+      header: 'Weld Machine',
+      width: 'min-w-[100px]',
+      align: 'text-right font-mono',
+      field: 'welding_machine',
+    },
+    {
+      header: 'Hand Weld',
+      width: 'min-w-[100px]',
+      align: 'text-right font-mono',
+      field: 'hand_welding',
+    },
+    {
+      header: 'Note',
+      width: 'min-w-[150px]',
+      align: 'text-left italic text-gray-500',
+      field: 'note',
+    },
   ];
 
+  const renderCell = (item: any, col: any) => {
+    let value;
+    if (col.render) {
+      value = col.render(item);
+    } else {
+      value = item[col.field];
+    }
+    return (
+      <div className={cn('truncate', col.align)} title={String(value)}>
+        {formatValue(value)}
+      </div>
+    );
+  };
+
   return (
-    <div className="overflow-auto max-h-[60vh] border border-gray-300 rounded-lg shadow-sm">
+    <div className="overflow-auto max-h-[calc(100vh-300px)] border border-gray-200 rounded-lg shadow-sm bg-white">
       <table className="w-full border-collapse text-sm">
-        <thead className="sticky top-0 z-10">
-          <tr className="bg-gradient-to-r from-gray-100 to-gray-50 border-b-2 border-gray-300">
-            <th className="w-10 border-r border-gray-300 p-3 bg-gray-100"></th>
-            {tableHeaders.map((header, index) => (
+        <thead className="sticky top-0 z-20 shadow-sm">
+          <tr className="bg-gray-100 border-b border-gray-300 text-gray-700">
+            <th className="w-10 p-2 bg-gray-100 sticky left-0 z-30 border-r border-gray-300"></th>
+            {columns.map((col, index) => (
               <th
                 key={index}
-                className="border-r border-gray-300 px-3 py-3 text-left text-xs font-semibold text-gray-700 whitespace-nowrap bg-gray-50 last:border-r-0"
+                className={cn(
+                  'px-3 py-3 text-xs font-bold uppercase tracking-wider whitespace-nowrap border-r border-gray-300 last:border-r-0 bg-gray-100',
+                  col.width,
+                  col.align.includes('right')
+                    ? 'text-right'
+                    : col.align.includes('center')
+                    ? 'text-center'
+                    : 'text-left',
+                )}
               >
-                {header}
+                {col.header}
               </th>
             ))}
           </tr>
@@ -1410,155 +1594,51 @@ const BomTable = ({ data }: { data: BomTreeNode[] }) => {
         <tbody>
           {data.map(parent => (
             <React.Fragment key={`parent-${parent.index}`}>
-              <tr className="bg-white hover:bg-blue-50 transition-colors border-b border-gray-200">
-                <td className="border-r border-gray-300 p-2 bg-gray-50">
+              <tr className="bg-blue-50/40 hover:bg-blue-100/60 transition-colors border-b border-gray-200 group">
+                <td className="p-2 sticky left-0 bg-gray-50/90 group-hover:bg-blue-100/60 z-10 border-r border-gray-300 text-center">
                   {parent.children.length > 0 && (
                     <button
                       onClick={() => toggleRowExpansion(parent.index!)}
-                      className="flex items-center justify-center w-6 h-6 rounded hover:bg-blue-100 transition-colors"
+                      className="p-1 rounded hover:bg-white text-blue-600 transition-colors shadow-sm border border-transparent hover:border-blue-200"
                     >
                       {expandedRows.has(parent.index!) ? (
-                        <ChevronDown className="h-4 w-4 text-blue-600" />
+                        <ChevronDown className="h-4 w-4" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-500" />
+                        <ChevronRight className="h-4 w-4" />
                       )}
                     </button>
                   )}
                 </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 font-semibold text-blue-700 bg-blue-50">
-                  {formatValue(parent.index)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5">
-                  {formatValue(parent.project_id)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 font-medium">
-                  {formatValue(parent.assembly_id)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5">
-                  {formatValue(parent.ass_name)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5">
-                  {formatValue(parent.part_name)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5">
-                  {formatValue(parent.profile)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5">
-                  {formatValue(parent.material)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
-                  {formatValue(parent.thickness)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
-                  {formatValue(parent.width)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
-                  {formatValue(parent.length)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
-                  {formatValue(parent.qty_per_ass)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-center font-medium">
-                  {formatValue(parent.qty_total)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
-                  {formatValue(parent.weight_per_part)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
-                  {formatValue(parent.weight_combination)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
-                  {formatValue(parent.weight_per_ass)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-right font-medium">
-                  {formatValue(parent.weight_total)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-right">
-                  {formatValue(parent.area_per_ass)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-right font-medium">
-                  {formatValue(parent.area_total)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
-                  {formatValue(parent.welding_machine)}
-                </td>
-                <td className="border-r border-gray-200 px-3 py-2.5 text-center">
-                  {formatValue(parent.hand_welding)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-gray-600">
-                  {formatValue(parent.note)}
-                </td>
+                {columns.map((col, idx) => (
+                  <td
+                    key={`p-${idx}`}
+                    className={cn(
+                      'px-3 py-2.5 border-r border-gray-200 last:border-r-0',
+                      col.width,
+                    )}
+                  >
+                    {renderCell(parent, col)}
+                  </td>
+                ))}
               </tr>
               {expandedRows.has(parent.index!) &&
-                parent.children.map((child, childIndex) => (
+                parent.children.map((child, childIdx) => (
                   <tr
-                    key={`child-${parent.index}-${childIndex}`}
-                    className="bg-gray-50/50 hover:bg-gray-100 transition-colors border-b border-gray-100"
+                    key={`child-${parent.index}-${childIdx}`}
+                    className="bg-white hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                   >
-                    <td className="border-r border-gray-300 p-2 bg-gray-100"></td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-gray-400 text-xs bg-gray-50">
-                      —
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
-                      {formatValue(child.project_id)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
-                      {formatValue(child.assembly_id)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-gray-700">
-                      {formatValue(child.ass_name)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-gray-700">
-                      {formatValue(child.part_name)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
-                      {formatValue(child.profile)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-gray-600">
-                      {formatValue(child.material)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
-                      {formatValue(child.thickness)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
-                      {formatValue(child.width)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
-                      {formatValue(child.length)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
-                      {formatValue(child.qty_per_ass)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-700">
-                      {formatValue(child.qty_total)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
-                      {formatValue(child.weight_per_part)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
-                      {formatValue(child.weight_combination)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
-                      {formatValue(child.weight_per_ass)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-700">
-                      {formatValue(child.weight_total)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-600">
-                      {formatValue(child.area_per_ass)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-right text-gray-700">
-                      {formatValue(child.area_total)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
-                      {formatValue(child.welding_machine)}
-                    </td>
-                    <td className="border-r border-gray-200 px-3 py-2 text-center text-gray-600">
-                      {formatValue(child.hand_welding)}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-500">
-                      {formatValue(child.note)}
-                    </td>
+                    <td className="sticky left-0 bg-white z-10 border-r border-gray-200"></td>
+                    {columns.map((col, idx) => (
+                      <td
+                        key={`c-${idx}`}
+                        className={cn(
+                          'px-3 py-2 border-r border-gray-100 last:border-r-0 text-gray-600',
+                          col.width,
+                        )}
+                      >
+                        {renderCell(child, col)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
             </React.Fragment>

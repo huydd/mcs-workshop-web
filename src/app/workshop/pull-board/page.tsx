@@ -161,64 +161,45 @@ const PullBoardPage = () => {
       }
 
       // Group BOM data by (ass_name + profile) to create tasks
-      // Each group = 1 task
-      // Each parent node in group = 1 assembly
-      // Children of parent = parts of that assembly
+      // Each group = 1 task (e.g. "BEAM L100x6")
+      // Children of group = actual assemblies (parent items)
 
-      type GroupKey = string;
-      const grouped = new Map<GroupKey, {
-        ass_name: string | null;
-        profile: string | null;
-        material: string | null;
-        assemblies: BomTreeNode[]; // Parent nodes (assemblies)
-        totalQty: number;
-        totalWeight: number;
-      }>();
+      // Group items by Assembly Name + Profile
+      const groups = new Map<string, AvailableTask>();
 
-      bomData.data.forEach(parent => {
-        const key = `${parent.ass_name || 'UNKNOWN'}::${parent.profile || 'UNKNOWN'}`;
+      // Filter for PARENT items only (items with an index)
+      const parentItems = bomData.data.filter(
+        item => item.index !== null && item.index !== undefined,
+      );
 
-        const existing = grouped.get(key);
-        if (existing) {
-          existing.assemblies.push(parent);
-          existing.totalQty += parent.qty_total || 0;
-          existing.totalWeight += parent.weight_total || 0;
-        } else {
-          grouped.set(key, {
-            ass_name: parent.ass_name,
-            profile: parent.profile,
-            material: parent.material,
-            assemblies: [parent],
-            totalQty: parent.qty_total || 0,
-            totalWeight: parent.weight_total || 0,
+      parentItems.forEach((item, idx) => {
+        // Create a composite key
+        const key = `${item.ass_name || 'UNKNOWN'}::${
+          item.profile || 'UNKNOWN'
+        }`;
+
+        if (!groups.has(key)) {
+          groups.set(key, {
+            id: `task-group-${idx}`, // Use a unique ID for the group
+            index: idx + 1, // Visual index
+            ass_name: item.ass_name,
+            profile: item.profile,
+            material: item.material,
+            // Initialize totals
+            qty_total: item.qty_total || 0,
+            weight_total: item.weight_total || 0,
+            children: [item], // Start with this assembly
           });
+        } else {
+          const existing = groups.get(key)!;
+          // Accumulate totals
+          existing.qty_total += item.qty_total || 0;
+          existing.weight_total += item.weight_total || 0;
+          existing.children.push(item);
         }
       });
 
-      // Convert groups to tasks
-      // Each group's assemblies array contains the parent nodes (assemblies)
-      // CHANGED: Now children = assemblies (cấu kiện), not parts (phôi)
-      const tasks: AvailableTask[] = Array.from(grouped.entries()).map(([_, group], idx) => {
-        // Use assemblies as children instead of flattening to parts
-        // This makes subtasks = assemblies (cấu kiện) instead of parts (phôi)
-        const assembliesAsChildren: BomTreeNode[] = group.assemblies.map(assembly => ({
-          ...assembly,
-          // Keep the assembly with all its parts in children
-          // But we'll use assembly-level data for the subtask display
-        }));
-
-        return {
-          id: `task-${idx + 1}`,
-          index: idx + 1,
-          ass_name: group.ass_name,
-          profile: group.profile,
-          material: group.material,
-          qty_total: group.totalQty,
-          weight_total: group.totalWeight,
-          children: assembliesAsChildren, // Assemblies (cấu kiện), not parts (phôi)
-        };
-      });
-
+      const tasks = Array.from(groups.values());
       setAvailableTasks(tasks);
     } catch (error) {
       console.error('Error loading BOM data:', error);
@@ -554,39 +535,74 @@ const PullBoardPage = () => {
                   <Badge className="bg-blue-100 text-blue-700 text-xs">
                     #{task.index}
                   </Badge>
-                  <span className="font-medium text-sm text-secondary">
-                    {task.ass_name || 'Không có tên cấu kiện'}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium text-sm text-secondary">
+                      {task.ass_name || 'Không có tên cấu kiện'}
+                    </span>
+                    <div className="flex gap-2">
+                      <Badge
+                        variant="outline"
+                        className="border-blue-200 bg-blue-50 text-blue-700 text-xs gap-1"
+                      >
+                        <span className="font-semibold">
+                          {task.children.length}
+                        </span>
+                        <span>mã CK</span>
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="border-gray-200 bg-gray-50 text-gray-700 text-xs gap-1"
+                      >
+                        <span>Tổng SL:</span>
+                        <span className="font-semibold">{task.qty_total}</span>
+                      </Badge>
+                    </div>
+                  </div>
                   {isClaimedByMe && (
-                    <Badge className="bg-emerald-100 text-emerald-700 text-xs">
-                      Đã nhận bởi {workshopName}
+                    <Badge className="bg-emerald-100 text-emerald-700 text-xs ml-auto">
+                      {workshopName}
                     </Badge>
                   )}
                   {isClaimedByOther && (
-                    <Badge className="bg-red-100 text-red-700 text-xs">
-                      Đã nhận bởi {claim.workshopName}
+                    <Badge className="bg-red-100 text-red-700 text-xs ml-auto">
+                      {claim.workshopName}
                     </Badge>
                   )}
                   {isDraft && !claim?.confirmed && (
-                    <Badge className="bg-amber-100 text-amber-700 text-xs">
+                    <Badge className="bg-amber-100 text-amber-700 text-xs ml-auto">
                       Đang chọn
                     </Badge>
                   )}
                 </div>
-                <div className="text-xs text-secondary/60 mt-1 space-y-0.5">
-                  <div>Profile: {task.profile || '—'}</div>
-                  <div>Vật liệu: {task.material || '—'}</div>
-                  <div className="flex gap-3">
-                    <span>SL: {task.qty_total}</span>
-                    <span>KL: {task.weight_total.toFixed(2)} kg</span>
+                <div className="text-xs text-secondary/60 mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                  <div>
+                    Profile:{' '}
+                    <span className="font-medium text-secondary">
+                      {task.profile || '—'}
+                    </span>
+                  </div>
+                  <div>
+                    Vật liệu:{' '}
+                    <span className="font-medium text-secondary">
+                      {task.material || '—'}
+                    </span>
+                  </div>
+                  <div>
+                    Tổng KL:{' '}
+                    <span className="font-medium text-secondary">
+                      {task.weight_total.toFixed(2)} kg
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
             {hasChildren && (
               <button
-                onClick={() => toggleExpand(task.id, type)}
-                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                onClick={e => {
+                  e.stopPropagation();
+                  toggleExpand(task.id, type);
+                }}
+                className="p-1 hover:bg-gray-200 rounded transition-colors self-start mt-2"
               >
                 {expanded ? (
                   <ChevronDown className="h-4 w-4 text-secondary" />
@@ -597,32 +613,42 @@ const PullBoardPage = () => {
             )}
           </div>
 
-          {/* Sub-items */}
+          {/* Sub-items Table */}
           {hasChildren && expanded && (
-            <div className="mt-3 pt-3 border-t space-y-2">
-              <div className="text-xs font-medium text-secondary/70 mb-2">
-                Cấu kiện ({task.children.length}):
+            <div className="mt-3 pt-3 border-t">
+              <div className="text-xs font-semibold text-secondary/80 mb-2 uppercase tracking-wide px-1">
+                Chi tiết cấu kiện ({task.children.length})
               </div>
-              {task.children.map((assembly, idx) => (
-                <div
-                  key={idx}
-                  className="pl-6 py-2 bg-white/50 rounded border border-gray-200 text-xs"
-                >
-                  <div className="font-medium text-secondary">
-                    {assembly.ass_name || assembly.part_name || 'Cấu kiện'}
-                  </div>
-                  <div className="text-secondary/60 mt-1 space-y-0.5">
-                    {assembly.assembly_id && <div>Mã: {assembly.assembly_id}</div>}
-                    {assembly.qty_total && <div>SL: {assembly.qty_total}</div>}
-                    {assembly.weight_total && (
-                      <div>KL tổng: {assembly.weight_total.toFixed(2)} kg</div>
-                    )}
-                    {assembly.children && assembly.children.length > 0 && (
-                      <div className="text-gray-500 italic">({assembly.children.length} phôi)</div>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <div className="overflow-hidden border border-gray-200 rounded-lg bg-white">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-gray-50 text-secondary/60 font-medium border-b border-gray-100">
+                    <tr>
+                      <th className="px-3 py-2">Mã CK</th>
+                      <th className="px-3 py-2 text-right">SL</th>
+                      <th className="px-3 py-2 text-right">KL (kg)</th>
+                      <th className="px-3 py-2 text-right">Số phôi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {task.children.map((assembly, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50/50">
+                        <td className="px-3 py-2 font-medium text-secondary">
+                          {assembly.assembly_id || assembly.ass_name || '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {assembly.qty_total}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {assembly.weight_total?.toFixed(1)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-500">
+                          {assembly.children?.length || 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
